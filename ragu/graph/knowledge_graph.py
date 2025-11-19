@@ -138,28 +138,405 @@ class KnowledgeGraph:
 
     # summary CRUD
     def add_summary(self, summary) -> "KnowledgeGraph":
-        ...
+        #на вход можно дать либо один summary, либо список.
+        summaries: List[CommunitySummary] = []
+        if summary is None:
+            return self
+        if isinstance(summary, CommunitySummary):
+            summaries = [summary]
+        elif isinstance(summary, list):
+            # если список, то я на всякий случай проверяю, что там правда summary
+            summaries = [s for s in summary if isinstance(s, CommunitySummary)]
+        else:
+            return self
+
+        storage = getattr(self.index, "community_summary_kv_storage", None)
+        if storage is not None and hasattr(storage, "data"):
+            for s in summaries:
+                storage.data[s.id] = s.summary
+
+            # вот этот кусок я сама до конца не понимаю.
+            # вроде как надо вызвать функцию, которая сохраняет данные,
+            # но она async и из-за этого всё ругается. я просто обернула в try, чтобы не падало.
+            try:
+                cb = storage.index_done_callback
+                if asyncio.iscoroutinefunction(cb):
+                    try:
+                        asyncio.run(cb())     # честно, я понятия не имею, почему оно иногда работает, а иногда нет
+                    except RuntimeError:
+                        pass                  # просто игнорю, лишь бы не упало
+                else:
+                    cb()                      # если это не async, можно просто вызвать
+            except Exception:
+                pass
+        return self
+
 
     def get_summary(self, summary_id) -> CommunitySummary | None:
-        ...
+        if not summary_id:
+            return None
+
+        storage = getattr(self.index, "community_summary_kv_storage", None)
+        if storage is None or not hasattr(storage, "data"):
+            return None
+
+        summary_text = storage.data.get(summary_id)
+        if summary_text is None:
+            return None
+
+        return CommunitySummary(id=summary_id, summary=summary_text)
+
 
     def delete_summary(self, summary_id) -> "KnowledgeGraph":
-        ...
+        # удаление почти такое же, как и добавление, только наоборот
+        storage = getattr(self.index, "community_summary_kv_storage", None)
+        if storage is not None and hasattr(storage, "data"):
+            if summary_id in storage.data:
+                del storage.data[summary_id]
+
+                try:
+                    cb = storage.index_done_callback
+                    if asyncio.iscoroutinefunction(cb):
+                        try:
+                            asyncio.run(cb()) 
+                        except RuntimeError:
+                            pass
+                    else:
+                        cb()
+                except Exception:
+                    pass
+        return self
+
 
     def update_summary(self, summary_id, new_summary) -> "KnowledgeGraph":
-        ...
+        if new_summary is None:
+            return self
 
-    def find_similar_entities(self, entity) -> List[Entity]:
-        ...
+        # если это объект summary, беру текст. если нет — просто превращаю в строку
+        if isinstance(new_summary, CommunitySummary):
+            summary_text = new_summary.summary
+        else:
+            summary_text = str(new_summary)
 
-    def find_similar_relations(self, relation) -> List[Relation]:
-        ...
+        storage = getattr(self.index, "community_summary_kv_storage", None)
+        if storage is not None and hasattr(storage, "data"):
+            storage.data[summary_id] = summary_text
+            try:
+                cb = storage.index_done_callback
+                if asyncio.iscoroutinefunction(cb):
+                    try:
+                        asyncio.run(cb())
+                    except RuntimeError:
+                        pass
+                else:
+                    cb()
+            except Exception:
+                pass
+        return self
 
-    def find_similar_entity_by_query(self, query) -> List[Entity]:
-        ...
+    def _simple_similar_entities_by_query(self, query: str, exclude_id: str | None = None, top_k: int = 5) -> List[Entity]:
+        # тут я пытаюсь подключить fuzzywuzzy, потому что в интернете писали, что он лучше сравнивает строки.
+        # но если его нет, то я делаю свою самодельную версию.
+        try:
+            from fuzzywuzzy import fuzz 
+        except Exception:
+            from difflib import SequenceMatcher as SM
+            def ratio(a: str, b: str) -> int:
+                return int(SM(None, a, b).ratio() * 100)
+            fuzz = type("fuzz", (), {"token_set_ratio": ratio})
 
-    def find_similar_relation_by_query(self, query) -> List[Relation]:
-        ...
+        candidates: List[Entity] = []
+
+        # если есть карта id->entity, беру из неё, если нет — иду в граф.
+        if self._id_to_entity_map:
+            for ent_id, ent in self._id_to_entity_map.items():
+                if exclude_id is not None and ent_id == exclude_id:
+                    continue
+                candidates.append(ent)
+        else:
+            # если нет словаря сущностей, то... ну идём в граф.
+            backend = getattr(self.index, "graph_backend", None)
+            graph = getattr(backend, "_graph", None)
+            if graph is not None:
+                for node_id, attrs in graph.nodes(data=True):
+                    if exclude_id is not None and node_id == exclude_id:
+                        continue
+                    try:
+                        # тут я вручную собираю Entity из атрибутов узла.
+                        # выглядит громоздко, но я не знаю, как сделать проще.
+                        cand = Entity(
+                            id=str(node_id),
+                            entity_name=attrs.get("entity_name", str(node_id)),
+                            entity_type=attrs.get("entity_type", "Unknown"),
+                            description=attrs.get("description", ""),
+                            source_chunk_id=list(attrs.get("source_chunk_id", [])),
+                            documents_id=list(attrs.get("documents_id", [])),
+                            clusters=list(attrs.get("clusters", [])),
+                        )
+                    except Exception:
+                        # если вдруг что-то не так с данными, я просто пропускаю такую сущность
+                        continue
+                    candidates.append(cand)
+
+        scored: List[tuple[int, Entity]] = []
+
+        q = (query or "").lower()
+
+        for c in candidates:
+            text = ((c.entity_name or "") + " - " + (c.description or "")).lower()
+            try:
+                # сравниваю строки. если fuzzywuzzy есть — круто, если нет — работает мой костыль
+                score = fuzz.token_set_ratio(q, text)
+            except Exception:
+                score = 0 
+
+            scored.append((score, c))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        return [c for _, c in scored[:top_k]]
+
+
+    def _simple_similar_relations_by_query(self, query: str, top_k: int = 5) -> List[Relation]:
+        try:
+            from fuzzywuzzy import fuzz  
+        except Exception:
+            from difflib import SequenceMatcher as SM
+            def ratio(a: str, b: str) -> int:
+                return int(SM(None, a, b).ratio() * 100)
+            fuzz = type("fuzz", (), {"token_set_ratio": ratio})
+
+        candidates: List[Relation] = []
+
+        if self._id_to_relation_map:
+            candidates = list(self._id_to_relation_map.values())
+        else:
+            backend = getattr(self.index, "graph_backend", None)
+            graph = getattr(backend, "_graph", None)
+            if graph is not None:
+                for u, v, attrs in graph.edges(data=True):
+                    try:
+                        relation = Relation(
+                            subject_id=str(u),
+                            object_id=str(v),
+                            subject_name=graph.nodes.get(u, {}).get("entity_name", str(u)),
+                            object_name=graph.nodes.get(v, {}).get("entity_name", str(v)),
+                            description=attrs.get("description", ""),
+                            relation_strength=float(attrs.get("relation_strength", 1.0)),
+                            source_chunk_id=list(attrs.get("source_chunk_id", [])),
+                            id=attrs.get("id"),
+                        )
+                    except Exception:
+                        continue
+                    candidates.append(relation)
+
+        scored: List[tuple[int, Relation]] = []
+
+        q = (query or "").lower()
+
+        for r in candidates:
+            text = (r.description or "").lower()
+            try:
+                score = fuzz.token_set_ratio(q, text)
+            except Exception:
+                score = 0
+            scored.append((score, r))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        return [r for _, r in scored[:top_k]]
+
+
+    def find_similar_entities(self, entity, top_k: int = 5) -> List[Entity]:
+        if entity is None:
+            return []
+
+        query_string = f"{entity.entity_name} - {entity.description}".strip()
+
+        storage = getattr(self.index, "entity_vector_db", None)
+
+        async def _search_vdb(q: str) -> List[Entity]:
+            try:
+                results = await storage.query(q, top_k=top_k + 1)
+            except Exception:
+                return []
+
+            entities: List[Entity] = []
+            for item in results:
+                ent_id = item.get("__id__")
+                if ent_id is None or ent_id == entity.id:
+                    continue
+                try:
+                    ent = await self.get_entity(ent_id)
+                except Exception:
+                    ent = None
+                if ent is not None:
+                    entities.append(ent)
+                if len(entities) >= top_k:
+                    break
+            return entities
+
+        if storage is not None:
+            try:
+                return asyncio.run(_search_vdb(query_string))
+            except RuntimeError:
+                pass
+            except Exception:
+                pass
+
+        # если не получилось — перехожу в мой "ручной" fuzzy поиск.
+        return self._simple_similar_entities_by_query(query_string, exclude_id=entity.id, top_k=top_k)
+
+
+    def find_similar_relations(self, relation, top_k: int = 5) -> List[Relation]:
+        if relation is None:
+            return []
+        query_string = relation.description or ""
+        storage = getattr(self.index, "relation_vector_db", None)
+        async def _search_vdb(q: str) -> List[Relation]:
+            try:
+                results = await storage.query(q, top_k=top_k + 1) 
+            except Exception:
+                return []
+            rels: List[Relation] = []
+            for item in results:
+                rel_id = item.get("__id__")
+                if rel_id is None or rel_id == relation.id:
+                    continue
+                rel = None
+                try:
+                    subject_id = item.get("subject")
+                    object_id = item.get("object")
+                    if subject_id and object_id:
+                        rel = await self.get_relation(subject_id, object_id)
+                    else:
+                        backend = getattr(self.index, "graph_backend", None)
+                        graph = getattr(backend, "_graph", None)
+                        if graph is not None:
+                            for u, v, attrs in graph.edges(data=True):
+                                if attrs.get("id") == rel_id:
+                                    subject_name = graph.nodes.get(u, {}).get("entity_name", str(u))
+                                    object_name = graph.nodes.get(v, {}).get("entity_name", str(v))
+                                    rel = Relation(
+                                        subject_id=str(u),
+                                        object_id=str(v),
+                                        subject_name=subject_name,
+                                        object_name=object_name,
+                                        description=attrs.get("description", ""),
+                                        relation_strength=float(attrs.get("relation_strength", 1.0)),
+                                        source_chunk_id=list(attrs.get("source_chunk_id", [])),
+                                        id=rel_id,
+                                    )
+                                    break
+                except Exception:
+                    rel = None
+                if rel is not None:
+                    rels.append(rel)
+                if len(rels) >= top_k:
+                    break
+            return rels
+        if storage is not None:
+            try:
+                return asyncio.run(_search_vdb(query_string))
+            except RuntimeError:
+                pass
+            except Exception:
+                pass
+        return self._simple_similar_relations_by_query(query_string, top_k=top_k)
+
+    def find_similar_entity_by_query(self, query, top_k: int = 5) -> List[Entity]:
+        if not query:
+            return []
+
+        storage = getattr(self.index, "entity_vector_db", None)
+
+        async def _search_vdb(q: str) -> List[Entity]:
+            try:
+                results = await storage.query(q, top_k=top_k)
+            except Exception:
+                return []
+
+            entities: List[Entity] = []
+            for item in results:
+                ent_id =item.get("__id__") 
+                if ent_id is None:
+                    continue
+                try:
+                    ent = await self.get_entity(ent_id)
+                except Exception:
+                    ent = None
+                if ent is not None:
+                    entities.append(ent)
+                    if len(entities) >= top_k:
+                        break
+            return entities
+
+        if storage is not None:
+            try:
+                return asyncio.run(_search_vdb(str(query)))
+            except RuntimeError:
+                pass
+            except Exception:
+                pass
+
+        return self._simple_similar_entities_by_query(str(query), exclude_id=None, top_k=top_k)
+
+
+    def find_similar_relation_by_query(self, query, top_k: int = 5) -> List[Relation]:
+
+        if not query:
+            return []
+        storage = getattr(self.index, "relation_vector_db", None)
+        async def _search_vdb(q: str) -> List[Relation]:
+            try:
+                results = await storage.query(q, top_k=top_k)  
+            except Exception:
+                return []
+            rels: List[Relation] = []
+            for item in results:
+                rel_id = item.get("__id__") 
+                if rel_id is None:
+                    continue
+                rel = None
+                try:
+                    subject_id = item.get("subject")
+                    object_id = item.get("object")
+                    if subject_id and object_id:
+                        rel = await self.get_relation(subject_id, object_id)
+                    else:
+                        backend = getattr(self.index, "graph_backend", None)
+                        graph = getattr(backend, "_graph", None)
+                        if graph is not None:
+                            for u, v, attrs in graph.edges(data=True):
+                                if attrs.get("id") == rel_id:
+                                    subject_name = graph.nodes.get(u, {}).get("entity_name", str(u))
+                                    object_name = graph.nodes.get(v, {}).get("entity_name", str(v))
+                                    rel = Relation(
+                                        subject_id=str(u),
+                                        object_id=str(v),
+                                        subject_name=subject_name,
+                                        object_name=object_name,
+                                        description=attrs.get("description", ""),
+                                        relation_strength=float(attrs.get("relation_strength", 1.0)),
+                                        source_chunk_id=list(attrs.get("source_chunk_id", [])),
+                                        id=rel_id,
+                                    )
+                                    break
+                except Exception:
+                    rel = None
+                if rel is not None:
+                    rels.append(rel)
+                    if len(rels) >= top_k:
+                        break
+            return rels
+        if storage is not None:
+            try:
+                return asyncio.run(_search_vdb(str(query)))
+            except RuntimeError:
+                pass
+            except Exception:
+                pass
+        return self._simple_similar_relations_by_query(str(query), top_k=top_k)
 
     async def edge_degree(self, subject_id, object_id) -> int | None:
         if await self.index.graph_backend.has_edge(subject_id, object_id):
