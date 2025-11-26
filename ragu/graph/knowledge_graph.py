@@ -200,7 +200,6 @@ class KnowledgeGraph:
                 pass
         return self
 
-    # fallback similarity using embedder instead of fuzzy matching
     async def _simple_similar_entities_by_query(self, query: str, exclude_id: str | None = None, top_k: int = 5) -> List[Entity]:
         if not query:
             return []
@@ -244,7 +243,6 @@ class KnowledgeGraph:
             ranked = sorted(zip(scores, candidates), key=lambda x: x[0], reverse=True)
             return [e for _, e in ranked[:top_k]]
         except Exception:
-            # fallback to plain string similarity if embeddings unavailable
             from difflib import SequenceMatcher as SM
             q_lower = query.lower()
             ranked = sorted(
@@ -301,7 +299,6 @@ class KnowledgeGraph:
             )
             return [r for _, r in ranked[:top_k]]
 
-    # similarity-search API methods
     async def find_similar_entities(self, entity: Entity | None, top_k: int = 5) -> List[Entity]:
         if entity is None:
             return []
