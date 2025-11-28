@@ -310,7 +310,7 @@ class KnowledgeGraph:
                 results = await storage.query(query_string, top_k=top_k + 1)
                 entities: List[Entity] = []
                 for item in results:
-                    ent_id = item.get("id") or item.get("__id__") or item.get("__id__")
+                    ent_id = item.get("__id__")
                     if ent_id is None or ent_id == entity.id:
                         continue
                     ent = await self.get_entity(ent_id)
@@ -334,7 +334,7 @@ class KnowledgeGraph:
                 results = await storage.query(query_string, top_k=top_k + 1)
                 rels: List[Relation] = []
                 for item in results:
-                    rel_id = item.get("id") or item.get("__id__") or item.get("__id__")
+                    rel_id = item.get("__id__")
                     if rel_id is None or rel_id == relation.id:
                         continue
                     subject_id = item.get("subject")
@@ -379,7 +379,7 @@ class KnowledgeGraph:
                 results = await storage.query(query, top_k=top_k)
                 entities: List[Entity] = []
                 for item in results:
-                    ent_id = item.get("id") or item.get("__id__") or item.get("__id__")
+                    ent_id = item.get("__id__")
                     if ent_id is None:
                         continue
                     ent = await self.get_entity(ent_id)
@@ -403,7 +403,7 @@ class KnowledgeGraph:
                 results = await storage.query(query, top_k=top_k)
                 rels: List[Relation] = []
                 for item in results:
-                    rel_id = item.get("id") or item.get("__id__") or item.get("__id__")
+                    rel_id = item.get("__id__")
                     if rel_id is None:
                         continue
                     subject_id = item.get("subject")
