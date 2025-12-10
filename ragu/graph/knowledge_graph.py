@@ -711,20 +711,12 @@ class KnowledgeGraph:
             allowed_pairs = relation_type_constraints.get(rel_label, set())
             validity = (subj_type, obj_type) in allowed_pairs
 
-            reason = None
-            if not validity:
-                if not allowed_pairs:
-                    reason = f"No type constraints observed for relation '{rel_label}'."
-                else:
-                    reason = f"Observed allowed types {allowed_pairs}, but got ({subj_type}, {obj_type})."
-
             final_output.append(
                 {
                     "subject": subj_label,
                     "relation": rel_label,
                     "object": obj_label,
                     "validity": validity,
-                    **({"reason": reason} if reason else {}),
                 }
             )
 
