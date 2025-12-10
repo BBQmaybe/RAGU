@@ -153,8 +153,8 @@ class KnowledgeGraph:
         if storage is not None:
             try:
                 payload = {s.id: s.summary for s in summaries}
-                await storage.upsert(payload)                     
-                await storage.index_done_callback()               
+                await storage.upsert(payload)                    
+                await storage.index_done_callback()              
             except Exception:
                 pass
         return self
@@ -182,7 +182,7 @@ class KnowledgeGraph:
                 existing = await storage.get_by_id(summary_id)
                 if existing is not None and hasattr(storage, "data"):
                     storage.data.pop(summary_id, None)
-                    await storage.index_done_callback()            
+                    await storage.index_done_callback()           
             except Exception:
                 pass
         return self
@@ -200,10 +200,15 @@ class KnowledgeGraph:
                 pass
         return self
 
-    async def _simple_similar_entities_by_query(self, query: str, exclude_id: str | None = None, top_k: int = 5) -> List[Entity]:
+    async def _simple_similar_entities_by_query(
+        self,
+        query: str,
+        exclude_id: str | None = None,
+        top_k: int = 5,
+    ) -> List[Entity]:
         if not query:
             return []
-        
+
         candidates: List[Entity] = []
         if self._id_to_entity_map:
             for ent_id, ent in self._id_to_entity_map.items():
@@ -217,44 +222,47 @@ class KnowledgeGraph:
                 for node_id, attrs in graph.nodes(data=True):
                     if exclude_id and str(node_id) == exclude_id:
                         continue
-                    candidates.append(Entity(
-                        id=str(node_id),
-                        entity_name=attrs.get("entity_name", str(node_id)),
-                        entity_type=attrs.get("entity_type", "Unknown"),
-                        description=attrs.get("description", ""),
-                        source_chunk_id=list(attrs.get("source_chunk_id", [])),
-                        documents_id=list(attrs.get("documents_id", [])),
-                        clusters=list(attrs.get("clusters", [])),
-                    ))
+                    candidates.append(
+                        Entity(
+                            id=str(node_id),
+                            entity_name=attrs.get("entity_name", str(node_id)),
+                            entity_type=attrs.get("entity_type", "Unknown"),
+                            description=attrs.get("description", ""),
+                            source_chunk_id=list(attrs.get("source_chunk_id", [])),
+                            documents_id=list(attrs.get("documents_id", [])),
+                            clusters=list(attrs.get("clusters", [])),
+                        )
+                    )
+
         if not candidates:
             return []
+
+        from numpy import array, linalg
+
         candidate_texts = [f"{c.entity_name} - {c.description}" for c in candidates]
         texts = [query] + candidate_texts
-        try:
-            embeddings = await self.index.embedder.embed(texts)
-            import numpy as np
-            emb_array = np.array(embeddings)
-            query_vec = emb_array[0]
-            candidate_vecs = emb_array[1:]
-            q_norm = np.linalg.norm(query_vec) + 1e-8
-            cand_norms = np.linalg.norm(candidate_vecs, axis=1) + 1e-8
-            scores = (candidate_vecs @ query_vec) / (cand_norms * q_norm)
-            ranked = sorted(zip(scores, candidates), key=lambda x: x[0], reverse=True)
-            return [e for _, e in ranked[:top_k]]
-        except Exception:
-            from difflib import SequenceMatcher as SM
-            q_lower = query.lower()
-            ranked = sorted(
-                [(SM(None, q_lower, (c.entity_name + " - " + c.description).lower()).ratio(), c) for c in candidates],
-                key=lambda x: x[0],
-                reverse=True
-            )
-            return [e for _, e in ranked[:top_k]]
+        embeddings = await self.index.embedder.embed(texts)
 
-    async def _simple_similar_relations_by_query(self, query: str, top_k: int = 5) -> List[Relation]:
+        emb_array = array(embeddings)
+        query_vec = emb_array[0]
+        candidate_vecs = emb_array[1:]
+
+        q_norm = linalg.norm(query_vec) + 1e-8
+        cand_norms = linalg.norm(candidate_vecs, axis=1) + 1e-8
+        scores = (candidate_vecs @ query_vec) / (cand_norms * q_norm)
+
+        ranked = sorted(zip(scores, candidates), key=lambda x: x[0], reverse=True)
+        return [e for _, e in ranked[:top_k]]
+
+
+    async def _simple_similar_relations_by_query(
+        self,
+        query: str,
+        top_k: int = 5,
+    ) -> List[Relation]:
         if not query:
             return []
-        
+
         candidates: List[Relation] = []
         if self._id_to_relation_map:
             candidates = list(self._id_to_relation_map.values())
@@ -263,209 +271,224 @@ class KnowledgeGraph:
             graph = getattr(backend, "_graph", None)
             if graph is not None:
                 for u, v, attrs in graph.edges(data=True):
-                    candidates.append(Relation(
-                        subject_id=str(u),
-                        object_id=str(v),
-                        subject_name=graph.nodes.get(u, {}).get("entity_name", str(u)),
-                        object_name=graph.nodes.get(v, {}).get("entity_name", str(v)),
-                        description=attrs.get("description", ""),
-                        relation_strength=float(attrs.get("relation_strength", 1.0)),
-                        source_chunk_id=list(attrs.get("source_chunk_id", [])),
-                        id=attrs.get("id"),
-                    ))
+                    candidates.append(
+                        Relation(
+                            subject_id=str(u),
+                            object_id=str(v),
+                            subject_name=graph.nodes.get(u, {}).get("entity_name", str(u)),
+                            object_name=graph.nodes.get(v, {}).get("entity_name", str(v)),
+                            description=attrs.get("description", ""),
+                            relation_strength=float(attrs.get("relation_strength", 1.0)),
+                            source_chunk_id=list(attrs.get("source_chunk_id", [])),
+                            id=attrs.get("id"),
+                        )
+                    )
+
         if not candidates:
             return []
+
+        from numpy import array, linalg
+
         candidate_texts = [rel.description or "" for rel in candidates]
         texts = [query] + candidate_texts
-        try:
-            embeddings = await self.index.embedder.embed(texts)
-            import numpy as np
-            emb_array = np.array(embeddings)
-            query_vec = emb_array[0]
-            candidate_vecs = emb_array[1:]
-            q_norm = np.linalg.norm(query_vec) + 1e-8
-            cand_norms = np.linalg.norm(candidate_vecs, axis=1) + 1e-8
-            scores = (candidate_vecs @ query_vec) / (cand_norms * q_norm)
-            ranked = sorted(zip(scores, candidates), key=lambda x: x[0], reverse=True)
-            return [r for _, r in ranked[:top_k]]
-        except Exception:
-            from difflib import SequenceMatcher as SM
-            q_lower = query.lower()
-            ranked = sorted(
-                [(SM(None, q_lower, r.description.lower()).ratio(), r) for r in candidates],
-                key=lambda x: x[0],
-                reverse=True
-            )
-            return [r for _, r in ranked[:top_k]]
+        embeddings = await self.index.embedder.embed(texts)
 
-    async def find_similar_entities(self, entity: Entity | None, top_k: int = 5) -> List[Entity]:
+        emb_array = array(embeddings)
+        query_vec = emb_array[0]
+        candidate_vecs = emb_array[1:]
+
+        q_norm = linalg.norm(query_vec) + 1e-8
+        cand_norms = linalg.norm(candidate_vecs, axis=1) + 1e-8
+        scores = (candidate_vecs @ query_vec) / (cand_norms * q_norm)
+
+        ranked = sorted(zip(scores, candidates), key=lambda x: x[0], reverse=True)
+        return [r for _, r in ranked[:top_k]]
+
+
+    async def find_similar_entities(
+        self,
+        entity: Entity | None,
+        top_k: int = 5,
+    ) -> List[Entity]:
         if entity is None:
             return []
-        
+
         query_string = f"{entity.entity_name} - {entity.description}".strip()
         storage = getattr(self.index, "entity_vector_db", None)
-        if storage is not None:
-            try:
-                results = await storage.query(query_string, top_k=top_k + 1)
-                entities: List[Entity] = []
-                for item in results:
-                    ent_id = item.get("__id__")
-                    if ent_id is None or ent_id == entity.id:
-                        continue
-                    ent = await self.get_entity(ent_id)
-                    if ent is not None:
-                        entities.append(ent)
-                        if len(entities) >= top_k:
-                            break
-                if entities:
-                    return entities
-            except Exception:
-                pass
-        return await self._simple_similar_entities_by_query(query_string, exclude_id=entity.id, top_k=top_k)
 
-    async def find_similar_relations(self, relation: Relation | None, top_k: int = 5) -> List[Relation]:
+        if storage is not None:
+            results = await storage.query(query_string, top_k=top_k + 1)
+            entities: List[Entity] = []
+            for item in results:
+                ent_id = item.get("__id__")
+                if ent_id is None or ent_id == entity.id:
+                    continue
+                ent = await self.get_entity(ent_id)
+                if ent is not None:
+                    entities.append(ent)
+                    if len(entities) >= top_k:
+                        break
+            if entities:
+                return entities
+
+        return await self._simple_similar_entities_by_query(
+            query_string,
+            exclude_id=entity.id,
+            top_k=top_k,
+        )
+
+
+    async def find_similar_relations(
+        self,
+        relation: Relation | None,
+        top_k: int = 5,
+    ) -> List[Relation]:
         if relation is None:
             return []
+
         query_string = relation.description or ""
         storage = getattr(self.index, "relation_vector_db", None)
+
         if storage is not None:
-            try:
-                results = await storage.query(query_string, top_k=top_k + 1)
-                rels: List[Relation] = []
-                for item in results:
-                    rel_id = item.get("__id__")
-                    if rel_id is None or rel_id == relation.id:
-                        continue
-                    subject_id = item.get("subject")
-                    object_id = item.get("object")
-                    if subject_id and object_id:
-                        rel_obj = await self.get_relation(subject_id, object_id)
-                    else:
-                        rel_obj = None
-                        backend = getattr(self.index, "graph_backend", None)
-                        graph = getattr(backend, "_graph", None)
-                        if graph is not None:
-                            for u, v, attrs in graph.edges(data=True):
-                                if attrs.get("id") == rel_id:
-                                    rel_obj = Relation(
-                                        subject_id=str(u),
-                                        object_id=str(v),
-                                        subject_name=graph.nodes.get(u, {}).get("entity_name", str(u)),
-                                        object_name=graph.nodes.get(v, {}).get("entity_name", str(v)),
-                                        description=attrs.get("description", ""),
-                                        relation_strength=float(attrs.get("relation_strength", 1.0)),
-                                        source_chunk_id=list(attrs.get("source_chunk_id", [])),
-                                        id=rel_id,
-                                    )
-                                    break
-                    if rel_obj is not None:
-                        rels.append(rel_obj)
-                        if len(rels) >= top_k:
-                            break
-                if rels:
-                    return rels
-            except Exception:
-                pass
+            results = await storage.query(query_string, top_k=top_k + 1)
+            rels: List[Relation] = []
+            for item in results:
+                rel_id = item.get("__id__")
+                if rel_id is None or rel_id == relation.id:
+                    continue
+
+                subject_id = item.get("subject")
+                object_id = item.get("object")
+
+                if subject_id and object_id:
+                    rel_obj = await self.get_relation(subject_id, object_id)
+                else:
+                    rel_obj = None
+                    backend = getattr(self.index, "graph_backend", None)
+                    graph = getattr(backend, "_graph", None)
+                    if graph is not None:
+                        for u, v, attrs in graph.edges(data=True):
+                            if attrs.get("id") == rel_id:
+                                rel_obj = Relation(
+                                    subject_id=str(u),
+                                    object_id=str(v),
+                                    subject_name=graph.nodes.get(u, {}).get("entity_name", str(u)),
+                                    object_name=graph.nodes.get(v, {}).get("entity_name", str(v)),
+                                    description=attrs.get("description", ""),
+                                    relation_strength=float(attrs.get("relation_strength", 1.0)),
+                                    source_chunk_id=list(attrs.get("source_chunk_id", [])),
+                                    id=rel_id,
+                                )
+                                break
+
+                if rel_obj is not None:
+                    rels.append(rel_obj)
+                    if len(rels) >= top_k:
+                        break
+
+            if rels:
+                return rels
+
         return await self._simple_similar_relations_by_query(query_string, top_k=top_k)
 
-    async def find_similar_entity_by_query(self, query: str | None, top_k: int = 5) -> List[Entity]:
-        if not query:
-            return []
-        
-        storage = getattr(self.index, "entity_vector_db", None)
-        if storage is not None:
-            try:
-                results = await storage.query(query, top_k=top_k)
-                entities: List[Entity] = []
-                for item in results:
-                    ent_id = item.get("__id__")
-                    if ent_id is None:
-                        continue
-                    ent = await self.get_entity(ent_id)
-                    if ent is not None:
-                        entities.append(ent)
-                        if len(entities) >= top_k:
-                            break
-                if entities:
-                    return entities
-            except Exception:
-                pass
-        return await self._simple_similar_entities_by_query(query, exclude_id=None, top_k=top_k)
 
-    async def find_similar_relation_by_query(self, query: str | None, top_k: int = 5) -> List[Relation]:
+    async def find_similar_entity_by_query(
+        self,
+        query: str | None,
+        top_k: int = 5,
+    ) -> List[Entity]:
         if not query:
             return []
-        
-        storage = getattr(self.index, "relation_vector_db", None)
+
+        storage = getattr(self.index, "entity_vector_db", None)
+
         if storage is not None:
-            try:
-                results = await storage.query(query, top_k=top_k)
-                rels: List[Relation] = []
-                for item in results:
-                    rel_id = item.get("__id__")
-                    if rel_id is None:
-                        continue
-                    subject_id = item.get("subject")
-                    object_id = item.get("object")
-                    if subject_id and object_id:
-                        rel_obj = await self.get_relation(subject_id, object_id)
-                    else:
-                        rel_obj = None
-                        backend = getattr(self.index, "graph_backend", None)
-                        graph = getattr(backend, "_graph", None)
-                        if graph is not None:
-                            for u, v, attrs in graph.edges(data=True):
-                                if attrs.get("id") == rel_id:
-                                    rel_obj = Relation(
-                                        subject_id=str(u),
-                                        object_id=str(v),
-                                        subject_name=graph.nodes.get(u, {}).get("entity_name", str(u)),
-                                        object_name=graph.nodes.get(v, {}).get("entity_name", str(v)),
-                                        description=attrs.get("description", ""),
-                                        relation_strength=float(attrs.get("relation_strength", 1.0)),
-                                        source_chunk_id=list(attrs.get("source_chunk_id", [])),
-                                        id=rel_id,
-                                    )
-                                    break
-                    if rel_obj is not None:
-                        rels.append(rel_obj)
-                        if len(rels) >= top_k:
-                            break
-                if rels:
-                    return rels
-            except Exception:
-                pass
+            results = await storage.query(query, top_k=top_k)
+            entities: List[Entity] = []
+            for item in results:
+                ent_id = item.get("__id__")
+                if ent_id is None:
+                    continue
+                ent = await self.get_entity(ent_id)
+                if ent is not None:
+                    entities.append(ent)
+                    if len(entities) >= top_k:
+                        break
+            if entities:
+                return entities
+
+        return await self._simple_similar_entities_by_query(
+            query,
+            exclude_id=None,
+            top_k=top_k,
+        )
+
+
+    async def find_similar_relation_by_query(
+        self,
+        query: str | None,
+        top_k: int = 5,
+    ) -> List[Relation]:
+        if not query:
+            return []
+
+        storage = getattr(self.index, "relation_vector_db", None)
+
+        if storage is not None:
+            results = await storage.query(query, top_k=top_k)
+            rels: List[Relation] = []
+            for item in results:
+                rel_id = item.get("__id__")
+                if rel_id is None:
+                    continue
+
+                subject_id = item.get("subject")
+                object_id = item.get("object")
+
+                if subject_id and object_id:
+                    rel_obj = await self.get_relation(subject_id, object_id)
+                else:
+                    rel_obj = None
+                    backend = getattr(self.index, "graph_backend", None)
+                    graph = getattr(backend, "_graph", None)
+                    if graph is not None:
+                        for u, v, attrs in graph.edges(data=True):
+                            if attrs.get("id") == rel_id:
+                                rel_obj = Relation(
+                                    subject_id=str(u),
+                                    object_id=str(v),
+                                    subject_name=graph.nodes.get(u, {}).get("entity_name", str(u)),
+                                    object_name=graph.nodes.get(v, {}).get("entity_name", str(v)),
+                                    description=attrs.get("description", ""),
+                                    relation_strength=float(attrs.get("relation_strength", 1.0)),
+                                    source_chunk_id=list(attrs.get("source_chunk_id", [])),
+                                    id=rel_id,
+                                )
+                                break
+
+                if rel_obj is not None:
+                    rels.append(rel_obj)
+                    if len(rels) >= top_k:
+                        break
+
+            if rels:
+                return rels
+
         return await self._simple_similar_relations_by_query(query, top_k=top_k)
 
 
-    async def edge_degree(self, subject_id, object_id) -> int | None:
-        if await self.index.graph_backend.has_edge(subject_id, object_id):
-            return await self.index.graph_backend.get_edge_degree(subject_id, object_id)
-        else:
-            return None
-
-    async def get_neighbors(self, entity_id) -> List[Entity]:
-        if await self.index.graph_backend.has_node(entity_id):
-            relations = await self.index.graph_backend.get_node_edges(entity_id)
-            neighbors_candidates = await asyncio.gather(*[self.get_entity(relation.object_id) for relation in relations])
-            return [neighbor for neighbor in neighbors_candidates if neighbor]
-        else:
-            return []
-    
-
-    async def extract_and_refine_triplets(self, text: str, top_k_similar: int = 5):
+    async def extract_and_refine_triplets(
+        self,
+        text: str,
+        top_k_similar: int = 5,
+    ):
         if not text or not text.strip():
             return []
 
-        client = None
-        try:
-            client = getattr(self.pipeline, "client", None) or getattr(self.pipeline, "llm", None)
-        except Exception:
-            client = None
+        client = getattr(self.pipeline, "client", None) or getattr(self.pipeline, "llm", None)
         if client is None:
-            logger.warning("extract_and_refine_triplets: No LLM client found; aborting extraction.")
             return []
-        
+
         from pydantic import BaseModel
         from typing import List as _List
         import json
@@ -488,15 +511,15 @@ class KnowledgeGraph:
         prompt_step1 = (
             "Task: extract all subject–relation–object triples from the text.\n\n"
             "Return JSON with the following structure:\n"
-            '{ "triplets": [ { "subject": "...", "relation": "...", "object": "..." }, ... ] }\n\n'
+            '{ "triplets": [ { "subject": \"...\", \"relation\": \"...\", \"object\": \"...\" }, ... ] }\n\n'
             "Example 1:\n"
-            'Text: "Marie Curie discovered radium."\n'
-            'Output: { "triplets": [ { "subject": "Marie Curie", "relation": "discovered", "object": "radium" } ] }\n\n'
+            'Text: \"Marie Curie discovered radium.\"\n'
+            'Output: { \"triplets\": [ { \"subject\": \"Marie Curie\", \"relation\": \"discovered\", \"object\": \"radium\" } ] }\n\n'
             "Example 2:\n"
-            'Text: "Albert Einstein was born in Ulm and worked at the Swiss Patent Office."\n'
-            'Output: { "triplets": [\n'
-            '  { "subject": "Albert Einstein", "relation": "was born in", "object": "Ulm" },\n'
-            '  { "subject": "Albert Einstein", "relation": "worked at", "object": "Swiss Patent Office" }\n'
+            'Text: \"Albert Einstein was born in Ulm and worked at the Swiss Patent Office.\"\n'
+            'Output: { \"triplets\": [\n'
+            '  { \"subject\": \"Albert Einstein\", \"relation\": \"was born in\", \"object\": \"Ulm\" },\n'
+            '  { \"subject\": \"Albert Einstein\", \"relation\": \"worked at\", \"object\": \"Swiss Patent Office\" }\n'
             "] }\n\n"
             f"Now process the following text:\n{text}\n\n"
             "Return ONLY valid JSON, no comments, no extra text."
@@ -505,31 +528,31 @@ class KnowledgeGraph:
         step1_results = await client.generate(
             prompt_step1,
             system_prompt=system_prompt_step1,
-            schema=_LLMTripletList,                
-            progress_bar_desc="Triplet extraction", 
+            schema=_LLMTripletList,
+            progress_bar_desc="Triplet extraction",
         )
+
         raw_triplets: list[dict] = []
         if step1_results and isinstance(step1_results[0], _LLMTripletList):
-            parsed: _LLMTripletList = step1_results[0]  
+            parsed: _LLMTripletList = step1_results[0]
             for t in parsed.triplets:
                 raw_triplets.append(
-                    {"subject": t.subject.strip(), "relation": t.relation.strip(), "object": t.object.strip()}
+                    {
+                        "subject": t.subject.strip(),
+                        "relation": t.relation.strip(),
+                        "object": t.object.strip(),
+                    }
                 )
         elif step1_results and isinstance(step1_results[0], str):
-            try:
-                data = json.loads(step1_results[0])
-                for t in data.get("triplets", []):
-                    raw_triplets.append(
-                        {
-                            "subject": str(t.get("subject", "")).strip(),
-                            "relation": str(t.get("relation", "")).strip(),
-                            "object": str(t.get("object", "")).strip(),
-                        }
-                    )
-            except Exception:
-                raw_triplets = []
-        else:
-            raw_triplets = []
+            data = json.loads(step1_results[0])
+            for t in data.get("triplets", []):
+                raw_triplets.append(
+                    {
+                        "subject": str(t.get("subject", "")).strip(),
+                        "relation": str(t.get("relation", "")).strip(),
+                        "object": str(t.get("object", "")).strip(),
+                    }
+                )
 
         if not raw_triplets:
             return []
@@ -544,36 +567,35 @@ class KnowledgeGraph:
             obj_name = t["object"]
 
             if subj_name not in entity_cache:
-                try:
-                    entity_cache[subj_name] = await self.find_similar_entity_by_query(subj_name, top_k=top_k_similar)
-                except Exception as exc:
-                    logger.error(f"Error retrieving similar entities for '{subj_name}': {exc}")
-                    entity_cache[subj_name] = []
+                entity_cache[subj_name] = await self.find_similar_entity_by_query(
+                    subj_name,
+                    top_k=top_k_similar,
+                )
             if rel_name not in relation_cache:
-                try:
-                    relation_cache[rel_name] = await self.find_similar_relation_by_query(rel_name, top_k=top_k_similar)
-                except Exception as exc:
-                    logger.error(f"Error retrieving similar relations for '{rel_name}': {exc}")
-                    relation_cache[rel_name] = []
+                relation_cache[rel_name] = await self.find_similar_relation_by_query(
+                    rel_name,
+                    top_k=top_k_similar,
+                )
             if obj_name not in entity_cache:
-                try:
-                    entity_cache[obj_name] = await self.find_similar_entity_by_query(obj_name, top_k=top_k_similar)
-                except Exception as exc:
-                    logger.error(f"Error retrieving similar entities for '{obj_name}': {exc}")
-                    entity_cache[obj_name] = []
+                entity_cache[obj_name] = await self.find_similar_entity_by_query(
+                    obj_name,
+                    top_k=top_k_similar,
+                )
 
             subj_cands = entity_cache.get(subj_name, [])
             rel_cands = relation_cache.get(rel_name, [])
             obj_cands = entity_cache.get(obj_name, [])
 
-            triplets_with_candidates.append({
-                "raw_subject": subj_name,
-                "raw_relation": rel_name,
-                "raw_object": obj_name,
-                "subject_candidates": [e.entity_name for e in subj_cands] or [subj_name],
-                "relation_candidates": [r.description for r in rel_cands if r.description] or [rel_name],
-                "object_candidates": [e.entity_name for e in obj_cands] or [obj_name],
-            })
+            triplets_with_candidates.append(
+                {
+                    "raw_subject": subj_name,
+                    "raw_relation": rel_name,
+                    "raw_object": obj_name,
+                    "subject_candidates": [e.entity_name for e in subj_cands] or [subj_name],
+                    "relation_candidates": [r.description for r in rel_cands if r.description] or [rel_name],
+                    "object_candidates": [e.entity_name for e in obj_cands] or [obj_name],
+                }
+            )
 
         system_prompt_step2 = (
             "You are an expert in knowledge graph canonicalisation. "
@@ -612,26 +634,25 @@ class KnowledgeGraph:
 
         refined_triplets: list[dict] = []
         if step2_results and isinstance(step2_results[0], _LLMTripletList):
-            parsed2: _LLMTripletList = step2_results[0]  
+            parsed2: _LLMTripletList = step2_results[0]
             for t in parsed2.triplets:
                 refined_triplets.append(
-                    {"subject": t.subject.strip(), "relation": t.relation.strip(), "object": t.object.strip()}
+                    {
+                        "subject": t.subject.strip(),
+                        "relation": t.relation.strip(),
+                        "object": t.object.strip(),
+                    }
                 )
         elif step2_results and isinstance(step2_results[0], str):
-            try:
-                data2 = json.loads(step2_results[0])
-                for t in data2.get("triplets", []):
-                    refined_triplets.append(
-                        {
-                            "subject": str(t.get("subject", "")).strip(),
-                            "relation": str(t.get("relation", "")).strip(),
-                            "object": str(t.get("object", "")).strip(),
-                        }
-                    )
-            except Exception:
-                refined_triplets = raw_triplets
-        else:
-            refined_triplets = raw_triplets
+            data2 = json.loads(step2_results[0])
+            for t in data2.get("triplets", []):
+                refined_triplets.append(
+                    {
+                        "subject": str(t.get("subject", "")).strip(),
+                        "relation": str(t.get("relation", "")).strip(),
+                        "object": str(t.get("object", "")).strip(),
+                    }
+                )
 
         if not refined_triplets:
             refined_triplets = raw_triplets
@@ -646,29 +667,22 @@ class KnowledgeGraph:
             graph = getattr(backend, "_graph", None)
             if graph is not None:
                 for u, v, attrs in graph.edges(data=True):
-                    try:
-                        rel_obj = Relation(
-                            subject_id=str(u),
-                            object_id=str(v),
-                            subject_name=graph.nodes.get(u, {}).get("entity_name", str(u)),
-                            object_name=graph.nodes.get(v, {}).get("entity_name", str(v)),
-                            description=attrs.get("description", ""),
-                            relation_strength=float(attrs.get("relation_strength", 1.0)),
-                            source_chunk_id=list(attrs.get("source_chunk_id", [])),
-                            id=attrs.get("id"),
-                        )
-                        all_relations.append(rel_obj)
-                    except Exception:
-                        continue
+                    rel_obj = Relation(
+                        subject_id=str(u),
+                        object_id=str(v),
+                        subject_name=graph.nodes.get(u, {}).get("entity_name", str(u)),
+                        object_name=graph.nodes.get(v, {}).get("entity_name", str(v)),
+                        description=attrs.get("description", ""),
+                        relation_strength=float(attrs.get("relation_strength", 1.0)),
+                        source_chunk_id=list(attrs.get("source_chunk_id", [])),
+                        id=attrs.get("id"),
+                    )
+                    all_relations.append(rel_obj)
 
         for rel in all_relations:
             desc = rel.description or ""
-            try:
-                subj_ent = await self.get_entity(rel.subject_id)
-                obj_ent = await self.get_entity(rel.object_id)
-            except Exception as exc:
-                logger.error(f"Error retrieving entity types for relation {rel.id}: {exc}")
-                continue
+            subj_ent = await self.get_entity(rel.subject_id)
+            obj_ent = await self.get_entity(rel.object_id)
             if not subj_ent or not obj_ent:
                 continue
             pair = (subj_ent.entity_type, obj_ent.entity_type)
@@ -681,28 +695,22 @@ class KnowledgeGraph:
             rel_label = t["relation"]
             obj_label = t["object"]
 
-            try:
-                subj_best = entity_cache.get(subj_label)
-                if subj_best is None:
-                    subj_best = await self.find_similar_entity_by_query(subj_label, top_k=1)
-                    entity_cache[subj_label] = subj_best
-            except Exception as exc:
-                logger.error(f"Error finding similar entity for subject '{subj_label}': {exc}")
-                subj_best = []
-            try:
-                obj_best = entity_cache.get(obj_label)
-                if obj_best is None:
-                    obj_best = await self.find_similar_entity_by_query(obj_label, top_k=1)
-                    entity_cache[obj_label] = obj_best
-            except Exception as exc:
-                logger.error(f"Error finding similar entity for object '{obj_label}': {exc}")
-                obj_best = []
+            subj_best = entity_cache.get(subj_label)
+            if subj_best is None:
+                subj_best = await self.find_similar_entity_by_query(subj_label, top_k=1)
+                entity_cache[subj_label] = subj_best
+
+            obj_best = entity_cache.get(obj_label)
+            if obj_best is None:
+                obj_best = await self.find_similar_entity_by_query(obj_label, top_k=1)
+                entity_cache[obj_label] = obj_best
 
             subj_type = subj_best[0].entity_type if subj_best else ""
             obj_type = obj_best[0].entity_type if obj_best else ""
 
             allowed_pairs = relation_type_constraints.get(rel_label, set())
             validity = (subj_type, obj_type) in allowed_pairs
+
             reason = None
             if not validity:
                 if not allowed_pairs:
@@ -721,3 +729,20 @@ class KnowledgeGraph:
             )
 
         return final_output
+
+    async def edge_degree(self, subject_id, object_id) -> int | None:
+        if await self.index.graph_backend.has_edge(subject_id, object_id):
+            return await self.index.graph_backend.get_edge_degree(subject_id, object_id)
+        else:
+            return None
+
+    async def get_neighbors(self, entity_id) -> List[Entity]:
+        if await self.index.graph_backend.has_node(entity_id):
+            relations = await self.index.graph_backend.get_node_edges(entity_id)
+            neighbors_candidates = await asyncio.gather(*[self.get_entity(relation.object_id) for relation in relations])
+            return [neighbor for neighbor in neighbors_candidates if neighbor]
+        else:
+            return []
+    
+
+    
