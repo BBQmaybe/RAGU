@@ -1,45 +1,48 @@
 #!/usr/bin/env python3
 """
-CLI entry point for the Wikidata verification pipeline.
+CLI entry point for the schema-based verification pipeline.
 
-Demonstrates how to plug :class:`WikidataVerificationModule` into a RAGU
+Demonstrates how to plug :class:`SchemaVerificationModule` into a RAGU
 :class:`KnowledgeGraph` build and — optionally — run the three-stage
 pipeline on a standalone piece of text *without* the full RAGU graph
 construction.
 
+All verification uses the internal NEREL schema (domain/range constraints)
+and requires no external API calls.
+
 Usage
 -----
 
-**Mode 1 — Standalone (text → verified triplets JSON)**::
+**Mode 1 — Standalone (text -> verified triplets JSON)**::
 
-    python scripts/run_wikidata_verification.py standalone \\
+    python scripts/run_schema_verification.py standalone \\
         --text "Marie Curie was a Polish-French physicist who won the Nobel Prize." \\
         --llm-model gpt-3.5-turbo \\
         --embedder-model text-embedding-3-small \\
         --base-url https://api.openai.com/v1 \\
-        --api-key sk-… \\
+        --api-key sk-... \\
         --top-k 5
 
-**Mode 2 — Full pipeline (documents → knowledge graph with Wikidata
+**Mode 2 — Full pipeline (documents -> knowledge graph with schema
 verification as an additional module)**::
 
-    python scripts/run_wikidata_verification.py pipeline \\
+    python scripts/run_schema_verification.py pipeline \\
         --docs-dir examples/data/en \\
         --llm-model gpt-3.5-turbo \\
         --embedder-model text-embedding-3-small \\
         --base-url https://api.openai.com/v1 \\
-        --api-key sk-… \\
+        --api-key sk-... \\
         --language english \\
-        --storage-folder ragu_working_dir/wikidata_verified \\
+        --storage-folder ragu_working_dir/schema_verified \\
         --top-k 5
 
 Requirements
 ~~~~~~~~~~~~
 ::
 
-    pip install faiss-cpu requests
+    pip install faiss-cpu
 
-These are in addition to the core RAGU dependencies.
+This is in addition to the core RAGU dependencies.
 """
 
 from __future__ import annotations
@@ -50,15 +53,15 @@ import json
 import sys
 from pathlib import Path
 
-# ── make the repo root importable when executed from scripts/ ──────────
+# -- make the repo root importable when executed from scripts/ -----------
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from ragu.common.logger import logger
 from ragu.embedder.openai_embedder import OpenAIEmbedder
-from ragu.graph.wikidata_verification import WikidataVerificationModule
-from ragu.graph.wikidata_verification.prompts import (
+from ragu.graph.schema_verification import SchemaVerificationModule
+from ragu.graph.schema_verification.prompts import (
     TripletList,
     build_extraction_messages,
     build_refinement_messages,
@@ -90,17 +93,17 @@ async def run_standalone(args: argparse.Namespace) -> None:
         use_cache=True,
     )
 
-    module = WikidataVerificationModule(
+    module = SchemaVerificationModule(
         client=client,
         embedder=embedder,
         top_k=args.top_k,
-        verify_ontology=not args.skip_verification,
-        language=args.language,
+        verify_schema=not args.skip_verification,
+        strict_relation=not args.lenient_relations,
     )
 
     text = args.text
 
-    # ── Step 1 — extraction ──
+    # -- Step 1 -- extraction --
     logger.info("[Standalone] Step 1: extracting candidate triplets")
     messages = build_extraction_messages(text)
     raw_result = await client.complete(messages=messages, response_model=TripletList)
@@ -111,17 +114,17 @@ async def run_standalone(args: argparse.Namespace) -> None:
     logger.info(f"[Standalone] Step 1 produced {len(raw_triplets)} triplets")
     _print_triplets("Raw triplets (Step 1)", raw_triplets)
 
-    # ── Retrieval — FAISS top-k ──
-    logger.info("[Standalone] Retrieval: finding Wikidata candidates")
+    # -- Retrieval -- FAISS top-k --
+    logger.info("[Standalone] Retrieval: finding schema candidates")
     subject_map, relation_map, object_map = await module._retrieval(raw_triplets)
 
     logger.info("[Standalone] Candidate mappings:")
     for name, cands in {**subject_map, **object_map}.items():
-        logger.info(f"  {name} → {cands}")
+        logger.info(f"  {name} -> {cands}")
     for name, cands in relation_map.items():
-        logger.info(f"  (rel) {name} → {cands}")
+        logger.info(f"  (rel) {name} -> {cands}")
 
-    # ── Step 2 — refinement ──
+    # -- Step 2 -- refinement --
     logger.info("[Standalone] Step 2: LLM refinement")
     messages = build_refinement_messages(
         text=text,
@@ -138,16 +141,16 @@ async def run_standalone(args: argparse.Namespace) -> None:
     logger.info(f"[Standalone] Step 2 produced {len(refined_triplets)} triplets")
     _print_triplets("Refined triplets (Step 2)", refined_triplets)
 
-    # ── Step 3 — ontology verification ──
+    # -- Step 3 -- schema verification --
     if not args.skip_verification:
-        logger.info("[Standalone] Step 3: ontology verification")
+        logger.info("[Standalone] Step 3: schema verification")
         results = await module._verifier.verify_batch(refined_triplets)
         verified = [vr.triplet for vr in results if vr.is_valid]
         for vr in results:
             status = "PASS" if vr.is_valid else "FAIL"
             logger.info(
                 f"  [{status}] ({vr.triplet.subject}, {vr.triplet.relation}, "
-                f"{vr.triplet.object}) — {vr.reason}"
+                f"{vr.triplet.object}) -- {vr.reason}"
             )
         logger.info(
             f"[Standalone] Step 3: {len(verified)}/{len(refined_triplets)} "
@@ -159,7 +162,7 @@ async def run_standalone(args: argparse.Namespace) -> None:
 
     _print_triplets("FINAL verified triplets", verified)
 
-    # ── JSON output ──
+    # -- JSON output --
     output = [t.model_dump() for t in verified]
     print("\n=== JSON output ===")
     print(json.dumps(output, ensure_ascii=False, indent=2))
@@ -176,7 +179,7 @@ async def run_standalone(args: argparse.Namespace) -> None:
 # ======================================================================
 
 async def run_pipeline(args: argparse.Namespace) -> None:
-    """Build a RAGU knowledge graph with Wikidata verification module."""
+    """Build a RAGU knowledge graph with schema verification module."""
 
     from ragu import (
         ArtifactsExtractorLLM,
@@ -215,13 +218,13 @@ async def run_pipeline(args: argparse.Namespace) -> None:
         use_cache=True,
     )
 
-    # The Wikidata verification module
-    wikidata_module = WikidataVerificationModule(
+    # The schema verification module (no external API calls)
+    schema_module = SchemaVerificationModule(
         client=client,
         embedder=embedder,
         top_k=args.top_k,
-        verify_ontology=not args.skip_verification,
-        language=args.language[:2],  # "english" → "en"
+        verify_schema=not args.skip_verification,
+        strict_relation=not args.lenient_relations,
     )
 
     chunker = SimpleChunker(max_chunk_size=1000)
@@ -239,7 +242,7 @@ async def run_pipeline(args: argparse.Namespace) -> None:
         chunker=chunker,
         artifact_extractor=artifact_extractor,
         builder_settings=builder_settings,
-        additional_modules=[wikidata_module],
+        additional_modules=[schema_module],
         language=args.language,
     )
 
@@ -268,7 +271,7 @@ def _print_triplets(title: str, triplets) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="Run the Wikidata verification pipeline",
+        description="Run the schema-based verification pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -282,10 +285,14 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--base-url", default="https://api.openai.com/v1")
         sp.add_argument("--api-key", required=True, help="OpenAI API key")
         sp.add_argument("--top-k", type=int, default=5)
-        sp.add_argument("--language", default="en")
+        sp.add_argument("--language", default="english")
         sp.add_argument(
             "--skip-verification", action="store_true",
-            help="Skip ontology verification (Step 3)",
+            help="Skip schema verification (Stage 3)",
+        )
+        sp.add_argument(
+            "--lenient-relations", action="store_true",
+            help="Accept unknown relation types instead of rejecting them",
         )
 
     # -- standalone sub-command ------------------------------------------
@@ -300,7 +307,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp_pl.add_argument("--docs-dir", required=True, help="Path to docs dir")
     sp_pl.add_argument(
         "--storage-folder",
-        default="ragu_working_dir/wikidata_verified",
+        default="ragu_working_dir/schema_verified",
     )
 
     return p

@@ -1,9 +1,8 @@
 """
-Main pipeline module: ``WikidataVerificationModule``.
+Main pipeline module: ``SchemaVerificationModule``.
 
-This :class:`GraphBuilderModule` implements the three-stage pipeline
-described in the paper *"Two-Step Knowledge Extraction + Ontology-based
-Verification"*, adapted for the RAGU project:
+This :class:`GraphBuilderModule` implements a three-stage pipeline for
+knowledge graph verification using the internal NEREL schema:
 
     Stage 1 — **Candidate extraction** (LLM, few-shot)
         Extract raw ``(subject, relation, object)`` triplets from the
@@ -11,15 +10,16 @@ Verification"*, adapted for the RAGU project:
 
     Retrieval — **Candidate linking** (FAISS + embedder)
         For every element of every triplet retrieve top-k canonical
-        Wikidata labels via the :class:`WikidataCandidateLinker`.
+        names from the NEREL vocabulary and existing graph entities
+        via the :class:`SchemaAwareCandidateLinker`.
 
     Stage 2 — **Refinement** (LLM)
         Ask the LLM to select the best canonical label from each top-k
         list, producing refined triplets.
 
-    Stage 3 — **Ontology verification** (SPARQL)
+    Stage 3 — **Schema verification** (NEREL constraints)
         Filter out triplets whose subject/object types are incompatible
-        with the property constraints defined in Wikidata.
+        with the domain/range constraints defined in the NEREL schema.
 
 Finally the verified triplets are mapped back to RAGU
 :class:`Entity` / :class:`Relation` objects so that the rest of the
@@ -34,34 +34,32 @@ from ragu.common.logger import logger
 from ragu.embedder.base_embedder import BaseEmbedder
 from ragu.graph.graph_builder_pipeline import GraphBuilderModule
 from ragu.graph.types import Entity, Relation
-from ragu.graph.wikidata_verification.candidate_linker import WikidataCandidateLinker
-from ragu.graph.wikidata_verification.ontology_verifier import OntologyVerifier
-from ragu.graph.wikidata_verification.prompts import (
+from ragu.graph.schema_verification.candidate_linker import SchemaAwareCandidateLinker
+from ragu.graph.schema_verification.schema_verifier import GraphSchemaVerifier
+from ragu.graph.schema_verification.prompts import (
     Triplet,
     TripletList,
     build_extraction_messages,
     build_refinement_messages,
 )
-from ragu.graph.wikidata_verification.wikidata_client import WikidataClient
 from ragu.llm.base_llm import BaseLLM
 
 
-class WikidataVerificationModule(GraphBuilderModule):
+class SchemaVerificationModule(GraphBuilderModule):
     """
-    A :class:`GraphBuilderModule` that links extracted entities / relations
-    to canonical Wikidata names and verifies them against the Wikidata
-    ontology.
+    A :class:`GraphBuilderModule` that normalises extracted entities /
+    relations against the NEREL schema and verifies them using internal
+    domain/range constraints.
 
     Plug this module into any RAGU pipeline via
-    ``additional_modules=[WikidataVerificationModule(…)]``.
+    ``additional_modules=[SchemaVerificationModule(...)]``.
 
     :param client: An LLM client implementing :class:`BaseLLM`.
     :param embedder: An embedder implementing :class:`BaseEmbedder`.
-    :param top_k: Number of Wikidata candidates per triplet element.
-    :param verify_ontology: Whether to run Step 3 (SPARQL verification).
-    :param language: ISO-639-1 language code for Wikidata look-ups.
-    :param search_limit: How many raw Wikidata results to fetch before
-        FAISS re-ranking.
+    :param top_k: Number of canonical candidates per triplet element.
+    :param verify_schema: Whether to run Stage 3 (schema verification).
+    :param strict_relation: When *True*, reject triplets with unknown
+        relation types.  When *False*, unknown relations pass through.
     """
 
     def __init__(
@@ -69,28 +67,21 @@ class WikidataVerificationModule(GraphBuilderModule):
         client: BaseLLM,
         embedder: BaseEmbedder,
         top_k: int = 5,
-        verify_ontology: bool = True,
-        language: str = "en",
-        search_limit: int = 15,
+        verify_schema: bool = True,
+        strict_relation: bool = True,
     ) -> None:
         super().__init__()
         self.client = client
         self.embedder = embedder
         self.top_k = top_k
-        self.verify_ontology = verify_ontology
-        self.language = language
+        self.verify_schema = verify_schema
 
-        self._wd_client = WikidataClient()
-        self._linker = WikidataCandidateLinker(
+        self._linker = SchemaAwareCandidateLinker(
             embedder=embedder,
-            wikidata_client=self._wd_client,
             top_k=top_k,
-            language=language,
-            search_limit=search_limit,
         )
-        self._verifier = OntologyVerifier(
-            wikidata_client=self._wd_client,
-            language=language,
+        self._verifier = GraphSchemaVerifier(
+            strict_relation=strict_relation,
         )
 
     # ==================================================================
@@ -104,23 +95,35 @@ class WikidataVerificationModule(GraphBuilderModule):
         **kwargs,
     ) -> Tuple[List[Entity], List[Relation]]:
         """
-        Execute the full three-stage Wikidata verification pipeline.
+        Execute the full three-stage schema verification pipeline.
 
         :param entities: Entities extracted by the upstream pipeline.
         :param relations: Relations extracted by the upstream pipeline.
-        :return: Filtered and canonicalised (entities, relations).
+        :return: Filtered and normalised (entities, relations).
         """
         if not entities:
             return entities, relations
 
         logger.info(
-            f"[WikidataVerification] Starting with {len(entities)} entities, "
+            f"[SchemaVerification] Starting with {len(entities)} entities, "
             f"{len(relations)} relations"
         )
 
         # ----------------------------------------------------------
-        # 0. Reconstruct textual context (the module does not receive
-        #    the raw text; we synthesise it from descriptions)
+        # 0. Build lookup tables from existing entities
+        # ----------------------------------------------------------
+        entity_names = [e.entity_name for e in entities]
+        self._linker.update_entity_candidates(entity_names)
+
+        type_lookup = {
+            e.entity_name.lower(): e.entity_type
+            for e in entities
+            if e.entity_type
+        }
+        self._verifier.update_type_lookup(type_lookup)
+
+        # ----------------------------------------------------------
+        # 0b. Reconstruct textual context
         # ----------------------------------------------------------
         context = self._reconstruct_context(entities, relations)
 
@@ -130,13 +133,13 @@ class WikidataVerificationModule(GraphBuilderModule):
         raw_triplets = await self._step1_extract(context)
         if not raw_triplets:
             logger.warning(
-                "[WikidataVerification] Step 1 produced no triplets; "
+                "[SchemaVerification] Step 1 produced no triplets; "
                 "returning input unchanged"
             )
             return entities, relations
 
         logger.info(
-            f"[WikidataVerification] Step 1: extracted {len(raw_triplets)} "
+            f"[SchemaVerification] Step 1: extracted {len(raw_triplets)} "
             f"raw triplets"
         )
 
@@ -149,7 +152,7 @@ class WikidataVerificationModule(GraphBuilderModule):
             object_map,
         ) = await self._retrieval(raw_triplets)
 
-        logger.info("[WikidataVerification] Retrieval: candidate mappings built")
+        logger.info("[SchemaVerification] Retrieval: candidate mappings built")
 
         # ----------------------------------------------------------
         # Stage 2 — Refinement (LLM)
@@ -159,23 +162,23 @@ class WikidataVerificationModule(GraphBuilderModule):
         )
         if not refined_triplets:
             logger.warning(
-                "[WikidataVerification] Step 2 produced no refined triplets; "
+                "[SchemaVerification] Step 2 produced no refined triplets; "
                 "returning input unchanged"
             )
             return entities, relations
 
         logger.info(
-            f"[WikidataVerification] Step 2: refined to "
+            f"[SchemaVerification] Step 2: refined to "
             f"{len(refined_triplets)} triplets"
         )
 
         # ----------------------------------------------------------
-        # Stage 3 — Ontology verification
+        # Stage 3 — Schema verification
         # ----------------------------------------------------------
-        if self.verify_ontology:
+        if self.verify_schema:
             verified_triplets = await self._step3_verify(refined_triplets)
             logger.info(
-                f"[WikidataVerification] Step 3: {len(verified_triplets)}/"
+                f"[SchemaVerification] Step 3: {len(verified_triplets)}/"
                 f"{len(refined_triplets)} triplets passed verification"
             )
         else:
@@ -183,7 +186,7 @@ class WikidataVerificationModule(GraphBuilderModule):
 
         if not verified_triplets:
             logger.warning(
-                "[WikidataVerification] No triplets survived verification; "
+                "[SchemaVerification] No triplets survived verification; "
                 "returning input unchanged"
             )
             return entities, relations
@@ -196,7 +199,7 @@ class WikidataVerificationModule(GraphBuilderModule):
         )
 
         logger.info(
-            f"[WikidataVerification] Final: {len(new_entities)} entities, "
+            f"[SchemaVerification] Final: {len(new_entities)} entities, "
             f"{len(new_relations)} relations"
         )
         return new_entities, new_relations
@@ -225,7 +228,7 @@ class WikidataVerificationModule(GraphBuilderModule):
     # -- Step 1 ---------------------------------------------------------
 
     async def _step1_extract(self, context: str) -> list[Triplet]:
-        """Few-shot LLM extraction → list of raw triplets."""
+        """Few-shot LLM extraction -> list of raw triplets."""
         messages = build_extraction_messages(context)
         try:
             result = await self.client.complete(
@@ -233,14 +236,13 @@ class WikidataVerificationModule(GraphBuilderModule):
                 response_model=TripletList,
             )
         except Exception as exc:
-            logger.error(f"[WikidataVerification] Step 1 LLM call failed: {exc}")
+            logger.error(f"[SchemaVerification] Step 1 LLM call failed: {exc}")
             return []
 
         if result is None:
             return []
         if isinstance(result, TripletList):
             return result.triplets
-        # Fallback: if the LLM returned raw text, try parsing
         return self._parse_triplets_text(result)
 
     @staticmethod
@@ -305,7 +307,7 @@ class WikidataVerificationModule(GraphBuilderModule):
                 response_model=TripletList,
             )
         except Exception as exc:
-            logger.error(f"[WikidataVerification] Step 2 LLM call failed: {exc}")
+            logger.error(f"[SchemaVerification] Step 2 LLM call failed: {exc}")
             return triplets  # fallback: keep raw
 
         if result is None:
@@ -321,12 +323,12 @@ class WikidataVerificationModule(GraphBuilderModule):
         self,
         triplets: list[Triplet],
     ) -> list[Triplet]:
-        """Ontology-based filtering via SPARQL constraints."""
+        """Schema-based filtering via NEREL domain/range constraints."""
         try:
             results = await self._verifier.verify_batch(triplets)
         except Exception as exc:
             logger.error(
-                f"[WikidataVerification] Ontology verification failed: {exc}; "
+                f"[SchemaVerification] Schema verification failed: {exc}; "
                 f"accepting all triplets"
             )
             return triplets
