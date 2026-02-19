@@ -40,6 +40,10 @@ from ragu.graph.schema_verification.schema import (
     get_allowed_subject_types,
     get_allowed_object_types,
 )
+from ragu.graph.schema_verification.gml_processor import (
+    GmlGraphProcessor,
+    ProcessingReport,
+)
 
 __all__ = [
     "SchemaVerificationModule",
@@ -48,6 +52,8 @@ __all__ = [
     "SchemaAwareCandidateLinker",
     "GraphSchemaVerifier",
     "VerificationResult",
+    "GmlGraphProcessor",
+    "ProcessingReport",
     "RELATION_CONSTRAINTS",
     "ALLOWED_ENTITY_TYPES",
     "ALLOWED_RELATION_TYPES",
