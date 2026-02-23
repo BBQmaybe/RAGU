@@ -123,6 +123,7 @@ class TestSchemaVerificationModuleIntegration:
         module = SchemaVerificationModule(
             client=llm,
             embedder=embedder,
+            enabled=True,
             top_k=3,
             verify_schema=True,
             strict_relation=True,
@@ -147,13 +148,59 @@ class TestSchemaVerificationModuleIntegration:
         assert "physicist" in names
         assert "Nobel Prize" in names
 
+    def test_module_disabled_by_default(self):
+        """When enabled=False (default), run() returns input unchanged."""
+        llm = _make_mock_llm()
+        embedder = _make_mock_embedder()
+        entities = _make_entities()
+        relations = _make_relations()
+
+        module = SchemaVerificationModule(
+            client=llm, embedder=embedder, top_k=3,
+        )
+        # enabled defaults to False
+        assert module.enabled is False
+
+        new_entities, new_relations = asyncio.get_event_loop().run_until_complete(
+            module.run(entities, relations)
+        )
+
+        # Input returned unchanged
+        assert new_entities is entities
+        assert new_relations is relations
+
+    def test_module_enabled_at_runtime(self):
+        """Toggle enabled at runtime to activate/deactivate."""
+        llm = _make_mock_llm()
+        embedder = _make_mock_embedder()
+        entities = _make_entities()
+        relations = _make_relations()
+
+        module = SchemaVerificationModule(
+            client=llm, embedder=embedder, top_k=3,
+        )
+
+        # Initially disabled
+        new_entities, new_relations = asyncio.get_event_loop().run_until_complete(
+            module.run(entities, relations)
+        )
+        assert new_entities is entities
+
+        # Enable at runtime
+        module.enabled = True
+        new_entities, new_relations = asyncio.get_event_loop().run_until_complete(
+            module.run(entities, relations)
+        )
+        assert len(new_entities) > 0
+        assert new_entities is not entities
+
     def test_pipeline_with_empty_entities(self):
         """Empty input should return empty output."""
         llm = _make_mock_llm()
         embedder = _make_mock_embedder()
 
         module = SchemaVerificationModule(
-            client=llm, embedder=embedder, top_k=3,
+            client=llm, embedder=embedder, enabled=True, top_k=3,
         )
 
         new_entities, new_relations = asyncio.get_event_loop().run_until_complete(
@@ -173,6 +220,7 @@ class TestSchemaVerificationModuleIntegration:
         module = SchemaVerificationModule(
             client=llm,
             embedder=embedder,
+            enabled=True,
             top_k=3,
             verify_schema=False,
         )
@@ -211,6 +259,7 @@ class TestSchemaVerificationModuleIntegration:
         module = SchemaVerificationModule(
             client=llm,
             embedder=embedder,
+            enabled=True,
             top_k=3,
             verify_schema=True,
             strict_relation=True,
@@ -232,7 +281,7 @@ class TestSchemaVerificationModuleIntegration:
         relations = _make_relations()
 
         module = SchemaVerificationModule(
-            client=llm, embedder=embedder, top_k=3,
+            client=llm, embedder=embedder, enabled=True, top_k=3,
         )
 
         new_entities, _ = asyncio.get_event_loop().run_until_complete(

@@ -96,6 +96,7 @@ async def run_standalone(args: argparse.Namespace) -> None:
     module = SchemaVerificationModule(
         client=client,
         embedder=embedder,
+        enabled=True,
         top_k=args.top_k,
         verify_schema=not args.skip_verification,
         strict_relation=not args.lenient_relations,
@@ -222,6 +223,7 @@ async def run_pipeline(args: argparse.Namespace) -> None:
     schema_module = SchemaVerificationModule(
         client=client,
         embedder=embedder,
+        enabled=True,
         top_k=args.top_k,
         verify_schema=not args.skip_verification,
         strict_relation=not args.lenient_relations,

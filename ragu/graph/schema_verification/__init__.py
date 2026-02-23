@@ -9,6 +9,9 @@ Implements a three-stage pipeline:
 All verification is performed internally using the NEREL ontology
 (29 entity types, 49 relation types) with no external API dependencies.
 
+The module is **disabled by default** (safe mode).  Pass ``enabled=True``
+to activate the verification pipeline at runtime.
+
 Usage::
 
     from ragu.graph.schema_verification import SchemaVerificationModule
@@ -16,12 +19,14 @@ Usage::
     module = SchemaVerificationModule(
         client=llm_client,
         embedder=embedder,
+        enabled=True,     # OFF by default; set True to activate
         top_k=5,
         verify_schema=True,
     )
 
 Plug the module into any RAGU :class:`KnowledgeGraph` via
-``additional_modules=[module]``.
+``additional_modules=[module]``.  When ``enabled=False`` the module
+is a no-op and returns the input unchanged.
 """
 
 from ragu.graph.schema_verification.module import SchemaVerificationModule

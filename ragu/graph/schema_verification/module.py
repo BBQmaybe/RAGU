@@ -28,6 +28,8 @@ pipeline (community detection, storage, search) continues transparently.
 
 from __future__ import annotations
 
+import asyncio
+import json
 from typing import List, Tuple
 
 from ragu.common.logger import logger
@@ -56,6 +58,9 @@ class SchemaVerificationModule(GraphBuilderModule):
 
     :param client: An LLM client implementing :class:`BaseLLM`.
     :param embedder: An embedder implementing :class:`BaseEmbedder`.
+    :param enabled: When *False* (default), ``run()`` is a no-op and
+        returns the input unchanged.  Set to *True* to activate the
+        verification pipeline.
     :param top_k: Number of canonical candidates per triplet element.
     :param verify_schema: Whether to run Stage 3 (schema verification).
     :param strict_relation: When *True*, reject triplets with unknown
@@ -66,6 +71,7 @@ class SchemaVerificationModule(GraphBuilderModule):
         self,
         client: BaseLLM,
         embedder: BaseEmbedder,
+        enabled: bool = False,
         top_k: int = 5,
         verify_schema: bool = True,
         strict_relation: bool = True,
@@ -73,6 +79,7 @@ class SchemaVerificationModule(GraphBuilderModule):
         super().__init__()
         self.client = client
         self.embedder = embedder
+        self.enabled = enabled
         self.top_k = top_k
         self.verify_schema = verify_schema
 
@@ -101,6 +108,13 @@ class SchemaVerificationModule(GraphBuilderModule):
         :param relations: Relations extracted by the upstream pipeline.
         :return: Filtered and normalised (entities, relations).
         """
+        if not self.enabled:
+            logger.debug(
+                "[SchemaVerification] Module disabled (enabled=False); "
+                "passing through unchanged"
+            )
+            return entities, relations
+
         if not entities:
             return entities, relations
 
@@ -248,7 +262,6 @@ class SchemaVerificationModule(GraphBuilderModule):
     @staticmethod
     def _parse_triplets_text(text) -> list[Triplet]:
         """Best-effort JSON parse from free-text LLM output."""
-        import json
         if not isinstance(text, str):
             return []
         try:
@@ -276,10 +289,10 @@ class SchemaVerificationModule(GraphBuilderModule):
         relations = [t.relation for t in triplets]
         objects = [t.object for t in triplets]
 
-        subject_map, relation_map, object_map = (
-            await self._linker.find_entity_candidates(subjects),
-            await self._linker.find_relation_candidates(relations),
-            await self._linker.find_entity_candidates(objects),
+        subject_map, relation_map, object_map = await asyncio.gather(
+            self._linker.find_entity_candidates(subjects),
+            self._linker.find_relation_candidates(relations),
+            self._linker.find_entity_candidates(objects),
         )
         return subject_map, relation_map, object_map
 

@@ -134,7 +134,11 @@ class SchemaAwareCandidateLinker:
                 text_set[lbl] = len(text_set)
 
         all_texts = list(text_set.keys())
-        embeddings_raw = await self.embedder.embed(all_texts)
+        try:
+            embeddings_raw = await self.embedder.embed(all_texts)
+        except Exception as exc:
+            logger.error(f"[CandidateLinker] Embedder failed: {exc}")
+            return {q: [] for q in queries}
 
         # Build a dense numpy matrix; replace None embeddings with zeros
         dim: int | None = None

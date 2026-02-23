@@ -16,15 +16,12 @@ constraints for the relation are open (empty sets ⇒ always valid).
 
 from __future__ import annotations
 
-import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List
 
 from ragu.common.logger import logger
 from ragu.graph.schema_verification.prompts import Triplet
 from ragu.graph.schema_verification.schema import (
-    RELATION_CONSTRAINTS,
-    ALLOWED_ENTITY_TYPES,
     ALLOWED_RELATION_TYPES,
     get_allowed_subject_types,
     get_allowed_object_types,
