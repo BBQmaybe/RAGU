@@ -16,6 +16,7 @@ from ragu.common.prompts.default_models import (
     ClusterSummarizationModel,
     QueryPlan,
     RewriteQuery,
+    EntityAlignmentModel,
 )
 from ragu.common.prompts.default_templates import (
     DEFAULT_ARTIFACTS_EXTRACTOR_PROMPT,
@@ -34,6 +35,7 @@ from ragu.common.prompts.default_templates import (
     DEFAULT_QUERY_DECOMPOSITION_PROMPT,
     DEFAULT_QUERY_REWRITE_PROMPT,
     DEFAULT_RAGU_LM_SYSTEM_PROMPT,
+    DEFAULT_ENTITY_ALIGNMENT_PROMPT,
 )
 from ragu.common.prompts.messages import (
     ChatMessages,
@@ -212,5 +214,15 @@ DEFAULT_PROMPT_TEMPLATES: dict[str, RAGUInstruction] = {
         ),
         pydantic_model=RewriteQuery,
         description="Prompt for rewriting a subquery using answers from its dependencies.",
+    ),
+
+    "entity_alignment": RAGUInstruction(
+        messages=ChatMessages.from_messages(
+            [
+                UserMessage(content=DEFAULT_ENTITY_ALIGNMENT_PROMPT),
+            ]
+        ),
+        pydantic_model=EntityAlignmentModel,
+        description="Prompt for verifying whether two similar-named entities should be merged.",
     ),
 }

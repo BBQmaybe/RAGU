@@ -1,7 +1,7 @@
 # Partially based on https://github.com/gusye1234/nano-graphrag/blob/main/nano_graphrag/
 
 import asyncio
-from typing import List
+from typing import List, Optional
 
 from ragu.common.global_parameters import Settings
 from ragu.embedder.base_embedder import BaseEmbedder
@@ -27,8 +27,9 @@ class LocalSearchEngine(BaseEngine):
 
     The engine:
       1. Retrieves relevant entities for the query.
-      2. Retrieves related items (relations, summary and chunks).
-      3. Generates a final response
+      2. Optionally aligns (deduplicates) the retrieved entities via EntityAligner.
+      3. Retrieves related items (relations, summary and chunks).
+      4. Generates a final response
 
     Reference
     ---------
@@ -44,6 +45,7 @@ class LocalSearchEngine(BaseEngine):
         tokenizer_backend: str = "tiktoken",
         tokenizer_model: str = "gpt-4",
         language: str | None = None,
+        entity_aligner=None,
         *args,
         **kwargs,
     ):
@@ -57,6 +59,9 @@ class LocalSearchEngine(BaseEngine):
         :param tokenizer_backend: Tokenizer backend used for token counting/truncation.
         :param tokenizer_model: Model name used by the tokenizer backend.
         :param language: Default output language (fed into prompt template).
+        :param entity_aligner: Optional :class:`~ragu.graph.entity_aligner.EntityAligner`
+            instance.  When provided, similar-named entities retrieved for each query
+            are verified by the LLM and merged in the graph before context assembly.
         """
         _PROMPTS_NAMES = ["local_search"]
         super().__init__(client=client, prompts=_PROMPTS_NAMES, *args, **kwargs)
@@ -70,6 +75,7 @@ class LocalSearchEngine(BaseEngine):
         self.knowledge_graph = knowledge_graph
         self.embedder = embedder
         self.language = language if language else Settings.language
+        self.entity_aligner = entity_aligner
 
     async def a_search(self, query: str, top_k: int = 20, *args, **kwargs) -> LocalSearchResult:
         """
@@ -86,6 +92,9 @@ class LocalSearchEngine(BaseEngine):
             for entity in entities_id
         ])
         entities = [data for data in entities if data is not None]
+
+        if self.entity_aligner is not None:
+            entities = await self.entity_aligner.align(entities)
 
         relations = await _find_most_related_edges_from_entities(entities, self.knowledge_graph)
         relations = [relation for relation in relations if relation is not None]

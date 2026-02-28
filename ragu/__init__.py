@@ -6,6 +6,7 @@ from ragu.chunker import SimpleChunker, SmartSemanticChunker
 # Knowledge Graph and builders
 from ragu.graph.knowledge_graph import KnowledgeGraph
 from ragu.graph.graph_builder_pipeline import InMemoryGraphBuilder, BuilderArguments
+from ragu.graph.entity_aligner import EntityAligner
 
 # Global settings
 from ragu.common.env import Env
@@ -45,4 +46,5 @@ __all__ = [
     "Settings",
     "SimpleChunker",
     "SmartSemanticChunker",
+    "EntityAligner",
 ]

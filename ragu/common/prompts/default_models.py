@@ -171,3 +171,22 @@ class QueryPlan(BaseModel):
 
 class RewriteQuery(BaseModel):
     query: str = Field(..., description="Rewritten query that is self-contained and explicit")
+
+
+class EntityAlignmentModel(BaseModel):
+    should_merge: bool = Field(
+        ...,
+        description="True if the two entities refer to the same real-world concept and should be merged",
+    )
+    merged_entity_name: Optional[str] = Field(
+        default=None,
+        description="Canonical name of the merged entity (required when should_merge=True)",
+    )
+    merged_entity_type: Optional[str] = Field(
+        default=None,
+        description="Type of the merged entity (required when should_merge=True)",
+    )
+    merged_description: Optional[str] = Field(
+        default=None,
+        description="Combined description of the merged entity (required when should_merge=True)",
+    )

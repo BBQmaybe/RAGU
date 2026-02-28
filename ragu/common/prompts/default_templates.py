@@ -157,6 +157,33 @@ Texts to summarize:
 {{ content }}
 """
 
+DEFAULT_ENTITY_ALIGNMENT_PROMPT = """
+**Goal**
+Determine whether two entities represent the same real-world concept and should be merged.
+
+**Instructions**
+1. Compare the names, types, and descriptions of both entities carefully.
+2. Decide if they refer to the same real-world entity (e.g. different spellings, abbreviations, aliases).
+3. If they should be merged:
+   - Choose or synthesize the canonical entity name.
+   - Preserve the entity type (use the most specific one if they differ).
+   - Combine the descriptions into one coherent description without redundancy.
+4. If they should NOT be merged, set should_merge to false and leave the other fields empty.
+
+Entity 1:
+- Name: {{ entity_a.entity_name }}
+- Type: {{ entity_a.entity_type }}
+- Description: {{ entity_a.description }}
+
+Entity 2:
+- Name: {{ entity_b.entity_name }}
+- Type: {{ entity_b.entity_type }}
+- Description: {{ entity_b.description }}
+
+Provide the answer in the following language: {{ language }}
+Return the result as valid JSON matching the provided schema.
+"""
+
 DEFAULT_RAGU_LM_SYSTEM_PROMPT = "Вы - эксперт в области анализа текстов и извлечения семантической информации из них."
 
 DEFAULT_RAGU_LM_ENTITY_EXTRACTION_PROMPT = """
