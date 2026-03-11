@@ -26,6 +26,7 @@ This script was made by Claude Code
 
 import argparse
 import os
+import re
 from typing import Dict, Any, List
 
 import networkx as nx
@@ -190,6 +191,66 @@ class Neo4jImporter:
                     if created < len(batch):
                         print(f"  Warning: Only created {created}/{len(batch)} edges in batch")
 
+    def migrate_relation_types(self, old_type: str = "RELATES_TO") -> int:
+        """Replace generic RELATES_TO edges with specific relation_type labels.
+
+        For each edge that has a ``relation_type`` property, creates a new
+        relationship with that type as its Neo4j label and copies all
+        properties over, then deletes the original generic edge.
+
+        :param old_type: The generic relationship type to migrate from.
+        :return: Total number of migrated relationships.
+        """
+        def _sanitize(t: str) -> str:
+            t = (t or "RELATED_TO").strip()
+            t = re.sub(r"[^A-Za-z0-9_]", "_", t)
+            t = re.sub(r"_+", "_", t).strip("_")
+            return t.upper() if t else "RELATED_TO"
+
+        with self.driver.session() as session:
+            rows = session.run(
+                f"MATCH ()-[r:{old_type}]->() "
+                f"WHERE r.relation_type IS NOT NULL "
+                f"RETURN DISTINCT r.relation_type AS t"
+            ).data()
+
+        types = {_sanitize(r["t"]): r["t"] for r in rows}
+        print(f"Found {len(types)} distinct relation_type value(s) to migrate")
+
+        total = 0
+        with self.driver.session() as session:
+            for neo_label, raw_value in types.items():
+                query = (
+                    f"MATCH (a)-[r:{old_type}]->(b) "
+                    f"WHERE r.relation_type = $t "
+                    f"WITH a, b, r, properties(r) AS props "
+                    f"CREATE (a)-[nr:{neo_label}]->(b) "
+                    f"SET nr = props "
+                    f"DELETE r "
+                    f"RETURN count(*) AS migrated"
+                )
+                migrated = session.run(query, t=raw_value).single()["migrated"]
+                print(f"  {neo_label}: {migrated}")
+                total += migrated
+
+            # Fallback: edges with NULL or empty relation_type -> RELATED_TO
+            fallback_query = (
+                f"MATCH (a)-[r:{old_type}]->(b) "
+                f'WHERE r.relation_type IS NULL OR r.relation_type = "" '
+                f"WITH a, b, r, properties(r) AS props "
+                f"CREATE (a)-[nr:RELATED_TO]->(b) "
+                f"SET nr = props "
+                f"DELETE r "
+                f"RETURN count(*) AS migrated"
+            )
+            rest = session.run(fallback_query).single()["migrated"]
+            if rest:
+                print(f"  RELATED_TO (fallback): {rest}")
+            total += rest
+
+        print(f"Total migrated: {total}")
+        return total
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -232,6 +293,11 @@ def main():
         default=500,
         help="Batch size for Neo4j imports (default: 500)"
     )
+    parser.add_argument(
+        "--migrate-types",
+        action="store_true",
+        help="After import, replace generic RELATES_TO edges with per-relation_type labels"
+    )
 
     args = parser.parse_args()
 
@@ -267,6 +333,10 @@ def main():
             importer.clear_database()
 
         importer.import_graph(graph, batch_size=args.batch_size)
+
+        if args.migrate_types:
+            print("\nMigrating relation types...")
+            importer.migrate_relation_types()
 
         print("\nNeo4j Browser queries to try:")
         print("  MATCH (n) RETURN n LIMIT 100")
