@@ -46,6 +46,8 @@ class BuilderArguments:
     make_community_summary: bool = True
     remove_isolated_nodes: bool = True
     vectorize_chunks: bool = False
+    use_entity_alignment: bool = False
+    entity_alignment_threshold: float = 0.85
     cluster_only_if_more_than: int = 10000
     max_cluster_size: int = 128
     random_seed: int = 42

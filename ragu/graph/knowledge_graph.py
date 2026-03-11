@@ -8,6 +8,7 @@ from ragu.common.logger import logger
 from ragu.common.global_parameters import Settings
 from ragu.embedder.base_embedder import BaseEmbedder
 from ragu.graph.builder_modules import RemoveIsolatedNodes
+from ragu.graph.entity_aligner import EntityAligner
 from ragu.graph.graph_builder_pipeline import (
     InMemoryGraphBuilder,
     BuilderArguments,
@@ -57,6 +58,7 @@ class KnowledgeGraph:
         :param additional_modules: Optional post-processing modules for graph items.
         :param language: Optional language override. Defaults to ``Settings.language``.
         """
+        self.client = client
         self.builder_settings = builder_settings or BuilderArguments()
         self.storage_settings = storage_settings or StorageArguments()
         self.language = language or Settings.language
@@ -116,6 +118,11 @@ class KnowledgeGraph:
         if not is_vector_only:
             await self.index.insert_entities(entities)
             await self.index.insert_relations(relations)
+
+            if self.builder_settings.use_entity_alignment:
+                await self.align_entities(
+                    similarity_threshold=self.builder_settings.entity_alignment_threshold,
+                )
 
         should_vectorize = self.vectorize_chunks or is_vector_only
         await self.index.upsert_chunks(chunks, vectorize=should_vectorize)
@@ -306,6 +313,38 @@ class KnowledgeGraph:
         new_summary.id = summary_id
         await self.index.upsert_summaries([new_summary])
         return self
+
+    async def align_entities(
+        self,
+        similarity_threshold: float = 0.85,
+    ) -> List[Entity]:
+        """
+        Run LLM-verified entity alignment on the current graph.
+
+        Finds entity pairs with similar names (same type, string similarity
+        above *similarity_threshold*), verifies each pair via LLM, and merges
+        confirmed duplicates — redirecting edges and dropping self-loops.
+
+        Can be called both during :meth:`build_from_docs` (when
+        ``BuilderArguments.use_entity_alignment=True``) and independently
+        at any time on an already-built graph.
+
+        :param similarity_threshold: Minimum :func:`difflib.SequenceMatcher`
+            ratio for a pair to be considered a candidate (default ``0.85``).
+        :return: List of newly created merged entities (may be empty).
+        :raises ValueError: If no LLM client is available.
+        """
+        if self.client is None:
+            raise ValueError(
+                "Entity alignment requires an LLM client, but none was provided."
+            )
+
+        aligner = EntityAligner(
+            client=self.client,
+            index=self.index,
+            similarity_threshold=similarity_threshold,
+        )
+        return await aligner.run()
 
     async def find_similar_entities(self, entity: Entity, top_k: int = 10) -> List[Entity]:
         """
