@@ -53,6 +53,7 @@ class NetworkXStorage(BaseGraphStorage):
             entity_type=metadata.get("entity_type"),
             description=metadata.get("description", ""),
             source_chunk_id=list(metadata.get("source_chunk_id", [])),
+            documents_id=list(metadata.get("documents_id", [])),
             clusters=metadata.get("clusters", []),
         )
 
@@ -271,7 +272,7 @@ class NetworkXStorage(BaseGraphStorage):
         """
         entities: List[Entity] = []
         for node_id in self._graph.nodes():
-            entity = self._entity_from_node(node_id, dict(self._graph[node_id]))
+            entity = self._entity_from_node(node_id, dict(self._graph.nodes[node_id]))
             entities.append(entity)
         return entities
 

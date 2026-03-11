@@ -117,6 +117,7 @@ class EntityAligner:
         if len(entities) < 2:
             return []
 
+        entities = [e for e in entities if e.entity_name is not None]
         candidates = self._find_candidates(entities)
         if not candidates:
             logger.info("EntityAligner: no merge candidates found.")
