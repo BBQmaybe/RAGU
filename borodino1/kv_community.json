@@ -1,0 +1,47 @@
+{
+  "com-e61ef30e43ac56b333cb3e6ee1fa92fc": {
+    "level": 0,
+    "cluster_id": 0,
+    "entity_ids": [
+      "ent-2b45a94b84466ca6b4eb7ebcde31ed2d",
+      "ent-d8c863d57f13e09b99d45b3831a88698"
+    ],
+    "relation_ids": [
+      "rel-f0547b98722a2ff8d8d97b91f0716441"
+    ]
+  },
+  "com-36f89ef5a7c959c381f9918ec4cfc92e": {
+    "level": 0,
+    "cluster_id": 1,
+    "entity_ids": [
+      "ent-96da0e43d1196bf8a011740435d148e6",
+      "ent-f7f5269ab30b720f29483e5e8635d9f5"
+    ],
+    "relation_ids": [
+      "rel-3ee7dfb6ad19427541495365f7aa71e5",
+      "rel-d126a98792c997b5afe6700e61c931fe"
+    ]
+  },
+  "com-5125a209835f486634f64b66a203c0cb": {
+    "level": 0,
+    "cluster_id": 2,
+    "entity_ids": [
+      "ent-0f951b3e121eb0c97daa5179d46b561d",
+      "ent-293a1da6eb6bc6b796793cde418ed4d8"
+    ],
+    "relation_ids": [
+      "rel-0ab02e953998f91d4cc10c781728220e"
+    ]
+  },
+  "com-c7f16fb4d0aa363c9225fe4bb4aac061": {
+    "level": 0,
+    "cluster_id": 3,
+    "entity_ids": [
+      "ent-571751b956299fd5a858d478acbcf505",
+      "ent-d4479563a02faa3bb65591b5c1df3131"
+    ],
+    "relation_ids": [
+      "rel-b4ece87a0ed755cfe218ab984ca41595"
+    ]
+  }
+}

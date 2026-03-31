@@ -105,6 +105,9 @@ Return the result as valid JSON matching the provided schema.
 """
 
 DEFAULT_GLOBAL_SEARCH_CONTEXT_PROMPT = """
+**Language requirement (MANDATORY)**
+You MUST write your entire response exclusively in {{ language }}. Do not use any other language anywhere in your answer.
+
 **Goal**
 Answer the query by summarizing relevant information from the context and, if needed, well-known facts.
 
@@ -115,11 +118,13 @@ Answer the query by summarizing relevant information from the context and, if ne
 Query: {{ query }}
 Context: {{ context }}
 
-Provide the answer in the following language: {{ language }}
 Return the result as valid JSON matching the provided schema.
 """
 
 DEFAULT_GLOBAL_SEARCH_PROMPT = """
+**Language requirement (MANDATORY)**
+You MUST write your entire response exclusively in {{ language }}. Do not use any other language anywhere in your answer.
+
 **Goal**
 Answer the query by summarizing the provided ranked context.
 
@@ -130,11 +135,13 @@ Answer the query by summarizing the provided ranked context.
 Query: {{ query }}
 Context: {{ context }}
 
-Provide the answer in the following language: {{ language }}
 Return the result as valid JSON matching the provided schema.
 """
 
 DEFAULT_RESPONSE_ONLY_PROMPT = """
+**Language requirement (MANDATORY)**
+You MUST write your entire response exclusively in {{ language }}. Do not use any other language anywhere in your answer.
+
 **Goal**
 Answer the query by summarizing relevant information from the context and, if necessary, well-known facts.
 
@@ -145,7 +152,6 @@ Answer the query by summarizing relevant information from the context and, if ne
 Query: {{ query }}
 Context: {{ context }}
 
-Provide the answer in the following language: {{ language }}
 Return the result as valid JSON matching the provided schema.
 """
 

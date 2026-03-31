@@ -1,0 +1,342 @@
+{
+  "com-e61ef30e43ac56b333cb3e6ee1fa92fc": {
+    "level": 0,
+    "cluster_id": 0,
+    "entity_ids": [
+      "ent-9315ec72c51eda10cca714706c80b39a",
+      "ent-c914bb7eed65d9882eb932ed0b0b201a",
+      "ent-cc5016bb040a551f6c0c78526eeb4721"
+    ],
+    "relation_ids": [
+      "rel-a07bef6b87d5b58d4ed55b4698999290",
+      "rel-e8656d7259d7a7c66ba1a55428a98a43"
+    ]
+  },
+  "com-36f89ef5a7c959c381f9918ec4cfc92e": {
+    "level": 0,
+    "cluster_id": 1,
+    "entity_ids": [
+      "ent-4bc8777ebd725ca6860d56290b5bf22c",
+      "ent-be519ea8f95b5117d58f522ccc9b582a"
+    ],
+    "relation_ids": [
+      "rel-6eaeee8e8c61b6b6e4e491e81a81e715"
+    ]
+  },
+  "com-5125a209835f486634f64b66a203c0cb": {
+    "level": 0,
+    "cluster_id": 2,
+    "entity_ids": [
+      "ent-4835d26afae083413df25a55552a679d",
+      "ent-ff5b6e33698c3d36cbe9358383eb92f9"
+    ],
+    "relation_ids": [
+      "rel-c3a8058581ac562f404ce1ca77d7b0cd"
+    ]
+  },
+  "com-c7f16fb4d0aa363c9225fe4bb4aac061": {
+    "level": 0,
+    "cluster_id": 3,
+    "entity_ids": [
+      "ent-0bfd268f91b003e44159e4c1758edeea",
+      "ent-836a8e9ba30aeacd7ef2f57260225afe"
+    ],
+    "relation_ids": [
+      "rel-effe626c6ffd2cc2afb744041cc61b3b"
+    ]
+  },
+  "com-bb5742c370c75b097b4869c059f0b9c7": {
+    "level": 0,
+    "cluster_id": 4,
+    "entity_ids": [
+      "ent-6e5fd3ef9db7ab51ead116faea429f5c",
+      "ent-7d16a901604deae5dbbd50329b56484c"
+    ],
+    "relation_ids": [
+      "rel-7c2d37b9a93ec195237cd20dc99b0816"
+    ]
+  },
+  "com-d60dd5c2144ee63531b13a4258879486": {
+    "level": 0,
+    "cluster_id": 5,
+    "entity_ids": [
+      "ent-4c2ee8dd421a145a76c79ad11f1e8d35",
+      "ent-ea3152e54d440b385681a53562e500fb"
+    ],
+    "relation_ids": [
+      "rel-489206787ef52fea498e24bc6ba1163e"
+    ]
+  },
+  "com-962c3d20af2a754cf33319acb16c076c": {
+    "level": 0,
+    "cluster_id": 6,
+    "entity_ids": [
+      "ent-4686a5d0173393d6b6942187df6c3d0e",
+      "ent-793884aca3b9ccdd472300b44d4fbc4d"
+    ],
+    "relation_ids": [
+      "rel-5b691f7e5faeb8d295673854f4ef87de"
+    ]
+  },
+  "com-64fa0a1e487123625f87c57242a05613": {
+    "level": 0,
+    "cluster_id": 7,
+    "entity_ids": [
+      "ent-2721841b0a55cf2b2e0ca596fe2bb853",
+      "ent-80ca558560f1bbbac68ecd0599cf13a7"
+    ],
+    "relation_ids": [
+      "rel-357d573e6efd7427b03842d463357e02"
+    ]
+  },
+  "com-d742d0cf52584068590023908e166e7b": {
+    "level": 0,
+    "cluster_id": 8,
+    "entity_ids": [
+      "ent-702c4bcc8e2675c5907e2c61666f0c16",
+      "ent-d9195d34f52d33ea420ca9a16dc17a0f"
+    ],
+    "relation_ids": [
+      "rel-10d3749d594de54856e99215117023fc"
+    ]
+  },
+  "com-84d0b749117fba4aef6a11d6215d2cf6": {
+    "level": 0,
+    "cluster_id": 9,
+    "entity_ids": [
+      "ent-05f5be2a91ab7bf647fb7b824c602ac4",
+      "ent-290227eddffa7cc5cff9dac8b3b00032"
+    ],
+    "relation_ids": [
+      "rel-6cf8dcf3ee33e93f385d11cc158fe59c"
+    ]
+  },
+  "com-3fad638cb277a3bb11d379cf88fab720": {
+    "level": 0,
+    "cluster_id": 10,
+    "entity_ids": [
+      "ent-1b620eda83e336e636ed23ba3b23ca26",
+      "ent-42570af54499eea5af828f677ce2a58c"
+    ],
+    "relation_ids": [
+      "rel-81cadd6dd1613c443d037ec8f10211eb"
+    ]
+  },
+  "com-ce982967ab069bd359a4eaee48bc2fa8": {
+    "level": 0,
+    "cluster_id": 11,
+    "entity_ids": [
+      "ent-1f540320fb7010e14ec7eafff24ccdd2",
+      "ent-bc5074b673bce4d34142f38e44fead0b"
+    ],
+    "relation_ids": [
+      "rel-dbdbcbcd229db11bc8c39b98f5c8d7ce"
+    ]
+  },
+  "com-8719f9ec04374aa8586c8619a6241745": {
+    "level": 0,
+    "cluster_id": 12,
+    "entity_ids": [
+      "ent-75c971eab8b688ebe13b50ed37e23aa4",
+      "ent-c539c2449f45fd2ef75b67e0752d8b7b"
+    ],
+    "relation_ids": [
+      "rel-f3201bc1d4705b7ae75263f7bf5a0df4"
+    ]
+  },
+  "com-c100706c24debcec4bf0cd363c775af3": {
+    "level": 0,
+    "cluster_id": 13,
+    "entity_ids": [
+      "ent-15a1d6ce5ce8219bf5337735ce2d56a3",
+      "ent-6da1b58cd3b84210a175f5988d28fa59",
+      "ent-7cf1a56ecbf67eb137f1e7ec7bdfb6db",
+      "ent-a8e5565e2c12a11bb4b69e277dd1b47e",
+      "ent-d497409a690a95a2b8a8ac1c73e44857"
+    ],
+    "relation_ids": [
+      "rel-00decc9909ef2f68b00336388669fc8f",
+      "rel-3498ce7f391311b4eb866960c7a8b848",
+      "rel-705dbe6cb57c5c5c162999614d27d7fc",
+      "rel-f17adfa73548db48b1a30108a6b21117"
+    ]
+  },
+  "com-4650e5af90cf5c52317b5d4915bb3399": {
+    "level": 0,
+    "cluster_id": 14,
+    "entity_ids": [
+      "ent-32e495912b4c20d79342723329e4a08c",
+      "ent-417eb945723e983e696d3b6d31819df2"
+    ],
+    "relation_ids": [
+      "rel-a6303dc864124ea2c3a7d8933a76c2aa"
+    ]
+  },
+  "com-e29103d20fc7d57bedbb447f0c56f379": {
+    "level": 0,
+    "cluster_id": 15,
+    "entity_ids": [
+      "ent-86ef5f7a425c51f00bbb94171bc6d68e",
+      "ent-f9b52bf337d2e79d0aa06cee79719d31"
+    ],
+    "relation_ids": [
+      "rel-7ec1aae7751e9f9a8d5feafb31119734"
+    ]
+  },
+  "com-efe9f5ef29ef89c56ff7d1532494bd41": {
+    "level": 0,
+    "cluster_id": 16,
+    "entity_ids": [
+      "ent-5e8cebfe7c06c5be94cfb66fa2fb1ba8",
+      "ent-7b85d216d01aabbc5824fab8b0caa317",
+      "ent-818645f8e29a8f8ffcf77b10f490860a"
+    ],
+    "relation_ids": [
+      "rel-0bdf22d78a71d1ef039f9192ef17fe6f",
+      "rel-49edc38dbd676da4347691fe14712a7e"
+    ]
+  },
+  "com-a713f80b54171362d60d6d589e385ff3": {
+    "level": 0,
+    "cluster_id": 17,
+    "entity_ids": [
+      "ent-0c74111bb7b469d47b3b8b97f48e73cb",
+      "ent-393f4fd4b807d2a298021e3ffd5d85bd"
+    ],
+    "relation_ids": [
+      "rel-22602d1700a5d189c5e1e707ab7cbb7f"
+    ]
+  },
+  "com-38c071f7cd09c57e578ba09584a34626": {
+    "level": 0,
+    "cluster_id": 18,
+    "entity_ids": [
+      "ent-214e38d914d76d7a294cbd1b59746a18",
+      "ent-2dc5d9b2f210fa05e2be2c54970265bc"
+    ],
+    "relation_ids": [
+      "rel-c4b513d6ff9c2ab3eb5ae51cc1a85332"
+    ]
+  },
+  "com-fe4e5ce477a499fb7b6d9cf9f5255c94": {
+    "level": 0,
+    "cluster_id": 19,
+    "entity_ids": [
+      "ent-928e32a5fa6baafd68ef1cacdda2b931",
+      "ent-aa13c98544abe08dd51cde2c1d146732"
+    ],
+    "relation_ids": [
+      "rel-f7fc30fb83bee3c0c291177a5ccfe267"
+    ]
+  },
+  "com-c20a0d5269a0438957df981ffbd47065": {
+    "level": 0,
+    "cluster_id": 20,
+    "entity_ids": [
+      "ent-8587d62ba0d82e2845fb323be95642dd",
+      "ent-8bff121d7b427b8c02673530ff4296a3"
+    ],
+    "relation_ids": [
+      "rel-d099d391f0c9ff7abaffe566306d3531"
+    ]
+  },
+  "com-9d0ea2817df0624bf5e963b7071e6757": {
+    "level": 0,
+    "cluster_id": 21,
+    "entity_ids": [
+      "ent-71c81165130278f68a20a559cb7c22b8",
+      "ent-c604d1928be84e0fec042394c33fb9fe"
+    ],
+    "relation_ids": [
+      "rel-951fc85c3cd3f941ce0aab55b486836b"
+    ]
+  },
+  "com-0c00ccc5ed8e6b21dffe990999270ad9": {
+    "level": 0,
+    "cluster_id": 22,
+    "entity_ids": [
+      "ent-32a5c1e58b4faf1ad3fd074e73fcc84f",
+      "ent-fbf604bd8d5b8726bae220a22688432e"
+    ],
+    "relation_ids": [
+      "rel-5f388d6f3479450b67a2039d224ecc5b"
+    ]
+  },
+  "com-ef0144449ee22297f70e0e75b2c9afc4": {
+    "level": 0,
+    "cluster_id": 23,
+    "entity_ids": [
+      "ent-7624006e614058c652584d456d05a026",
+      "ent-82aa63abb027894caa34bc08844e50b9"
+    ],
+    "relation_ids": [
+      "rel-f9bc0b4786d63330ef0fabbff979d371"
+    ]
+  },
+  "com-ca0f901e0458489063b3008d1971afcd": {
+    "level": 0,
+    "cluster_id": 24,
+    "entity_ids": [
+      "ent-586d78d7fb8a22a01cbed56c9a7aa138",
+      "ent-88c630d1bcd6593675a5f150c878cba2"
+    ],
+    "relation_ids": [
+      "rel-92128b5de9f1440391eb068780867db1"
+    ]
+  },
+  "com-c12e8e2b9427e508f14cbaa4c0a4682c": {
+    "level": 0,
+    "cluster_id": 25,
+    "entity_ids": [
+      "ent-2a115b8c8294fabc326c00c3f56b758b",
+      "ent-8229d6ad1323ccc3fa673f97e870a939"
+    ],
+    "relation_ids": [
+      "rel-0f2c9950886d8aad8271c870efb03f54"
+    ]
+  },
+  "com-01252250dcab208d1168d7decced7011": {
+    "level": 0,
+    "cluster_id": 26,
+    "entity_ids": [
+      "ent-0f3bed70653ad08b41d858433fe1d3b8",
+      "ent-e0da27f72dfcfc4f785e062afe360654"
+    ],
+    "relation_ids": [
+      "rel-be80bda296e15dec0a4b110b8fc648e1"
+    ]
+  },
+  "com-011f09892e3fa56a310625069465a0d1": {
+    "level": 0,
+    "cluster_id": 27,
+    "entity_ids": [
+      "ent-53def50d6891092a37de810b463fa74e",
+      "ent-ff93308c5849c232494dac0579c47cb0"
+    ],
+    "relation_ids": [
+      "rel-fbdce380cd97942b7c2402a37208b6d3"
+    ]
+  },
+  "com-124ab270f692dd6b9187d5236d955a94": {
+    "level": 0,
+    "cluster_id": 28,
+    "entity_ids": [
+      "ent-50138add2dfcf5782312bb4c27527aa7",
+      "ent-96da0e43d1196bf8a011740435d148e6"
+    ],
+    "relation_ids": [
+      "rel-7b8738bed9a1d67d1b159d8bade308e1"
+    ]
+  },
+  "com-e17a9bac5e6f6fcc77e52cde9d97f2df": {
+    "level": 0,
+    "cluster_id": 29,
+    "entity_ids": [
+      "ent-30595246d72d1b064d92a2211f6c2c60",
+      "ent-e9a56f7d8bbc4ae49c30e22166d59b55"
+    ],
+    "relation_ids": [
+      "rel-385419ffd389c32347827cfd59efad34"
+    ]
+  }
+}
